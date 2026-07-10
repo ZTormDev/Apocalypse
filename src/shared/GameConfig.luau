@@ -193,4 +193,32 @@ GameConfig.BioRecall = {
 	},
 }
 
+-- ---------------------------------------------------------------------------------------
+-- Tuning: weapon grip & holster offsets
+-- All angles are in DEGREES for readability; the scripts convert to radians.
+-- ---------------------------------------------------------------------------------------
+GameConfig.WeaponTuning = {
+
+	-- Scrap Machete -- grip in the player's hand
+	-- Pos   = where the handle centre sits relative to the hand attachment
+	-- Rot   = X/Y/Z Euler rotation of the handle (degrees)
+	MacheteGrip = {
+		PosX = 0, PosY = -1.3, PosZ = 0,
+		RotX = 15, RotY = 0, RotZ = 0,
+	},
+
+	-- Improvised Pistol -- grip in the player's hand
+	PistolGrip = {
+		PosX = -0.5, PosY = -0.25, PosZ = 0,
+		RotX = 0, RotY = -90, RotZ = 0,
+	},
+
+	-- Scrap Machete -- holster on the player's back (while unequipped)
+	-- Pos is relative to the UpperTorso/Torso centre
+	MacheteHolster = {
+		PosX = 0.25, PosY = 0, PosZ = 0.6,
+		RotX = 225, RotY = 90, RotZ = 0,
+	},
+}
+
 return GameConfig

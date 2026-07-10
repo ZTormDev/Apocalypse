@@ -3,9 +3,20 @@
 -- Reusable cosmetic helpers for Tools (client-side). Currently the "holster" behavior that
 -- clones a weapon's Handle onto the player's back while the tool is unequipped -- extracted
 -- from the Scrap Machete so the next melee weapon can reuse it instead of reimplementing it.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+
 local ToolEffects = {}
 
-local DEFAULT_OFFSET = CFrame.new(0, 0.2, 0.5) * CFrame.Angles(math.rad(100), 0, 0)
+local function holsterOffsetFromConfig()
+	local t = GameConfig.WeaponTuning.MacheteHolster
+	-- Apply Y rotation first, then X, then Z to prevent Gimbal Lock when RotY is 90
+	return CFrame.new(t.PosX, t.PosY, t.PosZ)
+		* CFrame.Angles(0, math.rad(t.RotY), 0)
+		* CFrame.Angles(math.rad(t.RotX), 0, 0)
+		* CFrame.Angles(0, 0, math.rad(t.RotZ))
+end
 
 function ToolEffects.removeHolster(character: Model?, holsterName: string)
 	if not character then
@@ -38,13 +49,20 @@ function ToolEffects.showHolster(tool: Tool, character: Model?, holsterName: str
 	holster.CanTouch = false
 	holster.CanQuery = false
 	holster.Massless = true
-	holster.CFrame = back.CFrame * (offset or DEFAULT_OFFSET)
-	holster.Parent = character
 
-	local weld = Instance.new("WeldConstraint")
+	-- Use a Weld (not WeldConstraint) so the relative transform is set
+	-- explicitly via C0 rather than being captured from the physics state
+	-- at the moment of creation. This means GameConfig values are always
+	-- applied exactly as written.
+	local resolvedOffset = offset or holsterOffsetFromConfig()
+	local weld = Instance.new("Weld")
 	weld.Part0 = back
 	weld.Part1 = holster
+	weld.C0 = resolvedOffset   -- offset FROM back TO holster
+	weld.C1 = CFrame.new()     -- holster's own origin (identity)
 	weld.Parent = holster
+
+	holster.Parent = character -- Weld activates here and positions holster via C0
 end
 
 return ToolEffects

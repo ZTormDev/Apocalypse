@@ -16,6 +16,15 @@ local player = Players.LocalPlayer
 local macheteAttackEvent = Net.event("CombatEvents", "MacheteAttack")
 
 local MACHETE = GameConfig.Machete
+local TUNING = GameConfig.WeaponTuning.MacheteGrip
+
+local function applyGrip()
+	local g = TUNING
+	Tool.Grip = CFrame.new(g.PosX, g.PosY, g.PosZ)
+		* CFrame.Angles(0, math.rad(g.RotY), 0)
+		* CFrame.Angles(math.rad(g.RotX), 0, 0)
+		* CFrame.Angles(0, 0, math.rad(g.RotZ))
+end
 local RANGE = MACHETE.ClientRange
 local CONE_DOT = MACHETE.ClientConeDot
 local COOLDOWN = MACHETE.ClientCooldown
@@ -75,6 +84,7 @@ end)
 
 -- Show the blade on the player's back whenever the tool isn't equipped
 Tool.Equipped:Connect(function()
+	applyGrip()
 	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
 end)
 

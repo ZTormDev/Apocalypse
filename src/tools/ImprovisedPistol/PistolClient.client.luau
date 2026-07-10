@@ -14,7 +14,16 @@ local mouse = player:GetMouse()
 local pistolFireEvent = Net.event("CombatEvents", "PistolFire")
 
 local COOLDOWN = GameConfig.Pistol.ClientCooldown
+local TUNING = GameConfig.WeaponTuning.PistolGrip
 local lastFire = 0
+
+local function applyGrip()
+	local g = TUNING
+	Tool.Grip = CFrame.new(g.PosX, g.PosY, g.PosZ)
+		* CFrame.Angles(0, math.rad(g.RotY), 0)
+		* CFrame.Angles(math.rad(g.RotX), 0, 0)
+		* CFrame.Angles(0, 0, math.rad(g.RotZ))
+end
 
 -- Cosmetic muzzle flash / shell-eject / sound (from the mesh asset's own effect parts). Tied
 -- to that specific mesh's named children, so it stays here rather than in a generic helper.
@@ -66,6 +75,11 @@ local function playMuzzleFlash()
 		shell.shel.Enabled = false
 	end
 end
+
+-- Apply grip CFrame every time the tool is equipped (sounds block is optional)
+Tool.Equipped:Connect(function()
+	applyGrip()
+end)
 
 if sounds then
 	Tool.Equipped:Connect(function()
