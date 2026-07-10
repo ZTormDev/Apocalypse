@@ -26,7 +26,11 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 	if typeof(target) ~= "Instance" or not target:IsDescendantOf(workspace) then
 		return
 	end
-	if not CollectionService:HasTag(target, Tags.Mycomorph) then
+
+	local isMycomorph = CollectionService:HasTag(target, Tags.Mycomorph)
+	local isScrap = (target.Name == "ScrapPile")
+
+	if not isMycomorph and not isScrap then
 		return
 	end
 
@@ -47,8 +51,7 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 	end
 
 	local targetRoot = target.PrimaryPart
-	local humanoid = target:FindFirstChild("Humanoid")
-	if not targetRoot or not humanoid or humanoid.Health <= 0 then
+	if not targetRoot then
 		return
 	end
 
@@ -58,7 +61,79 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 	end
 
 	lastAttackTime[player] = now
-	humanoid:TakeDamage(MACHETE.Damage)
+
+	if isMycomorph then
+		local humanoid = target:FindFirstChild("Humanoid")
+		if humanoid and humanoid.Health > 0 then
+			humanoid:TakeDamage(MACHETE.Damage)
+		end
+	elseif isScrap then
+		local currentHealth = target:GetAttribute("Health") or 0
+		if currentHealth > 0 then
+			local newHealth = math.max(0, currentHealth - MACHETE.Damage)
+			target:SetAttribute("Health", newHealth)
+
+			if newHealth <= 0 then
+				local dropPos = targetRoot.Position
+				target:Destroy()
+
+				-- Spawn physical scrap items on the ground
+				local SC = GameConfig.Scrap
+				local scrapItemAsset = ReplicatedStorage:FindFirstChild("ScrapItemAsset")
+				if scrapItemAsset then
+					for i = 1, SC.PerPile do
+						local dropModel = scrapItemAsset:Clone()
+						dropModel.Name = "ScrapItemDropped"
+						dropModel:ScaleTo(0.7)
+
+						local union = dropModel:FindFirstChild("Scrap Metal") or dropModel:FindFirstChildOfClass("UnionOperation")
+						if union then
+							union.Anchored = false
+							union.CanCollide = true
+							union.Massless = false
+
+							-- Add ProximityPrompt for players to collect it
+							local prompt = Instance.new("ProximityPrompt")
+							prompt.ActionText = "Recoger Placa"
+							prompt.ObjectText = "Scrap"
+							prompt.MaxActivationDistance = 8
+							prompt.ClickablePrompt = false
+							prompt.Parent = union
+
+							prompt.Triggered:Connect(function(collectingPlayer)
+								dropModel:Destroy()
+								local ScrapWallet = require(game.ServerScriptService.modules.ScrapWallet)
+								ScrapWallet.Add(collectingPlayer, 1) -- Each plaque yields exactly 1 scrap
+							end)
+
+							-- Scatter slightly on spawn
+							dropModel:PivotTo(CFrame.new(dropPos + Vector3.new(
+								math.random(-1, 1),
+								math.random(1, 2),
+								math.random(-1, 1)
+							)))
+
+							dropModel.Parent = workspace
+
+							-- Apply physical dispersion impulse
+							union.AssemblyLinearVelocity = Vector3.new(
+								math.random(-8, 8),
+								math.random(10, 18),
+								math.random(-8, 8)
+							)
+						else
+							dropModel:Destroy()
+						end
+					end
+				else
+					-- Fallback: award directly if asset is missing
+					local ScrapWallet = require(game.ServerScriptService.modules.ScrapWallet)
+					ScrapWallet.Add(player, SC.PerPile)
+				end
+				print(player.Name .. " mined and destroyed a ScrapPile.")
+			end
+		end
+	end
 end)
 
 -- ---------------------------------------------------------------------------------------

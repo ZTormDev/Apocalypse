@@ -26,6 +26,11 @@ RunService.Stepped:Connect(function()
 	local shoulder = getShoulderJoint(character)
 	local upperTorso = character:FindFirstChild("UpperTorso")
 
+	-- Suspend aiming override during melee attacks to allow swing animations to display
+	if character:GetAttribute("IsAttackingMelee") == true then
+		return
+	end
+
 	if tool and shoulder and upperTorso then
 		local shoulderWorldPos = upperTorso.CFrame:PointToWorldSpace(shoulder.C0.Position)
 		local mousePos = mouse.Hit.Position

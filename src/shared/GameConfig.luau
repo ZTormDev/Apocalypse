@@ -72,6 +72,7 @@ GameConfig.Scrap = {
 	PerPile = 5,
 	RespawnCheckInterval = 12,
 	ThrowVelocity = 25,
+	MaxHealth = 100,
 }
 
 -- ---------------------------------------------------------------------------------------

@@ -16,7 +16,7 @@ local SC = GameConfig.Scrap
 
 local dropScrapEvent = Net.event("ScrapEvents", "DropScrap")
 
-local activePiles: { [BasePart]: boolean } = {}
+local activePiles: { [Model]: boolean } = {}
 
 -- Clean up any leftover piles from a previous run
 for _, child in ipairs(Workspace:GetChildren()) do
@@ -27,14 +27,14 @@ end
 
 local purifier = Workspace:WaitForChild("Purifier", 15)
 
-local function removeScrapPile(pile: BasePart)
+local function removeScrapPile(pile: Model)
 	activePiles[pile] = nil
 	if pile and pile.Parent then
 		pile:Destroy()
 	end
 end
 
-local function spawnScrapPile(pos: Vector3?): BasePart?
+local function spawnScrapPile(pos: Vector3?): Model?
 	if not purifier then
 		purifier = Workspace:FindFirstChild("Purifier")
 		if not purifier then
@@ -42,62 +42,181 @@ local function spawnScrapPile(pos: Vector3?): BasePart?
 		end
 	end
 
-	local pile = Instance.new("Part")
-	pile.Name = "ScrapPile"
-	pile.Size = Vector3.new(1.6, 1.2, 2)
+	local junkAsset = ReplicatedStorage:FindFirstChild("ScrapJunkPartsAsset")
+	if not junkAsset then
+		warn("ScrapJunkPartsAsset not found in ReplicatedStorage!")
+		return nil
+	end
 
+	local model = junkAsset:Clone()
+	model.Name = "ScrapPile"
+
+	-- Resolve the primary part (first Part found inside the inner Model)
+	local innerModel = model:FindFirstChild("Model")
+	local parts = innerModel and innerModel:GetChildren() or {}
+	local primaryPart = nil
+	for _, p in ipairs(parts) do
+		if p:IsA("BasePart") then
+			primaryPart = p
+			break
+		end
+	end
+
+	if not primaryPart then
+		model:Destroy()
+		return nil
+	end
+
+	model.PrimaryPart = primaryPart
+	primaryPart.Anchored = true
+	primaryPart.CanCollide = true
+	primaryPart.Massless = true
+
+	-- Weld all subparts to the primaryPart (and anchor all of them)
+	for _, p in ipairs(parts) do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+			p.CanCollide = true
+			p.Massless = true
+
+			if p ~= primaryPart then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = primaryPart
+				weld.Part1 = p
+				weld.Parent = p
+			end
+		end
+	end
+
+	-- Scale the model to be a bit smaller (0.8)
+	model:ScaleTo(0.8)
+
+	-- Positioning: Use raycasting to snap the model flat to the floor
+	local targetPos = nil
 	if pos then
-		pile.Position = pos
+		targetPos = pos
 	else
 		local angle = math.random() * math.pi * 2
 		local dist = math.random(SC.SpawnMinDist, SC.SpawnMaxDist)
-		pile.Position = purifier.Position + Vector3.new(math.cos(angle) * dist, 2, math.sin(angle) * dist)
+		local spawnPos = purifier.Position + Vector3.new(math.cos(angle) * dist, 0, math.sin(angle) * dist)
+
+		local rayOrigin = Vector3.new(spawnPos.X, 150, spawnPos.Z)
+		local rayDirection = Vector3.new(0, -200, 0)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { purifier, model }
+
+		local result = Workspace:Raycast(rayOrigin, rayDirection, params)
+		if result then
+			targetPos = result.Position
+		else
+			targetPos = Vector3.new(spawnPos.X, 2, spawnPos.Z)
+		end
 	end
 
-	pile.Anchored = false
-	pile.CanCollide = true
-	pile.Friction = 0.8
-	pile.Material = Enum.Material.Metal
-	pile.Color = Color3.fromRGB(120, 110, 90)
+	model:PivotTo(CFrame.new(targetPos))
 
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Store in Inventory [E]"
-	prompt.ObjectText = "Scrap"
-	prompt.HoldDuration = 0.2
-	prompt.MaxActivationDistance = 8
-	prompt.ClickablePrompt = false
-	prompt.Parent = pile
+	-- Setup Health attributes
+	model:SetAttribute("Health", SC.MaxHealth)
+	model:SetAttribute("MaxHealth", SC.MaxHealth)
 
-	prompt.Triggered:Connect(function(player)
-		removeScrapPile(pile)
-		ScrapWallet.Add(player, SC.PerPile)
-		print(player.Name .. " stored scrap in their inventory.")
+	-- Billboard Health Bar Gui
+	local bgui = Instance.new("BillboardGui")
+	bgui.Name = "HealthGui"
+	bgui.Size = UDim2.new(0, 80, 0, 8)
+	bgui.StudsOffset = Vector3.new(0, 3, 0)
+	bgui.AlwaysOnTop = true
+	bgui.Adornee = primaryPart
+	bgui.Enabled = false
+
+	local bg = Instance.new("Frame")
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bg.BorderSizePixel = 0
+	bg.Parent = bgui
+
+	local uiCorner1 = Instance.new("UICorner")
+	uiCorner1.CornerRadius = UDim.new(0, 3)
+	uiCorner1.Parent = bg
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+
+	local uiCorner2 = Instance.new("UICorner")
+	uiCorner2.CornerRadius = UDim.new(0, 3)
+	uiCorner2.Parent = fill
+
+	bgui.Parent = model
+
+	-- Update HealthBar visibility and scaling on damage
+	model:GetAttributeChangedSignal("Health"):Connect(function()
+		local h = model:GetAttribute("Health") or 0
+		local maxH = model:GetAttribute("MaxHealth") or 100
+		fill.Size = UDim2.new(math.clamp(h / maxH, 0, 1), 0, 1, 0)
+		bgui.Enabled = (h < maxH)
 	end)
 
-	pile.Parent = Workspace
-	activePiles[pile] = true
-	return pile
+	model.Parent = Workspace
+	activePiles[model] = true
+	return model
 end
 
--- Drop (F): throw exactly one pile's worth back into the world
+-- Drop (F): throw exactly 1 scrap plaque back into the world
 dropScrapEvent.OnServerEvent:Connect(function(player)
 	local char = player.Character
 	if not char or not char:FindFirstChild("HumanoidRootPart") then
 		return
 	end
 
-	if not ScrapWallet.TrySpend(player, SC.PerPile) then
+	-- Spends exactly 1 scrap to throw 1 physical plaque
+	if not ScrapWallet.TrySpend(player, 1) then
 		return
 	end
 
 	local root = char.HumanoidRootPart
-	local spawnPos = root.Position + root.CFrame.LookVector * 4
-	local spawned = spawnScrapPile(spawnPos)
-	if spawned then
-		spawned.AssemblyLinearVelocity = root.CFrame.LookVector * SC.ThrowVelocity + Vector3.new(0, 10, 0)
+	local spawnPos = root.Position + root.CFrame.LookVector * 3 + Vector3.new(0, 1, 0)
+
+	local scrapItemAsset = ReplicatedStorage:FindFirstChild("ScrapItemAsset")
+	if scrapItemAsset then
+		local dropModel = scrapItemAsset:Clone()
+		dropModel.Name = "ScrapItemDropped"
+		dropModel:ScaleTo(0.7) -- Make the dropped plaque smaller
+
+		local union = dropModel:FindFirstChild("Scrap Metal") or dropModel:FindFirstChildOfClass("UnionOperation")
+		if union then
+			union.Anchored = false
+			union.CanCollide = true
+			union.Massless = false
+
+			-- Add ProximityPrompt for players to collect it
+			local prompt = Instance.new("ProximityPrompt")
+			prompt.ActionText = "Recoger Placa"
+			prompt.ObjectText = "Scrap"
+			prompt.MaxActivationDistance = 8
+			prompt.ClickablePrompt = false
+			prompt.Parent = union
+
+			prompt.Triggered:Connect(function(collectingPlayer)
+				dropModel:Destroy()
+				local Wallet = require(game.ServerScriptService.modules.ScrapWallet)
+				Wallet.Add(collectingPlayer, 1)
+			end)
+
+			dropModel:PivotTo(CFrame.new(spawnPos))
+			dropModel.Parent = workspace
+
+			-- Launch the plaque forward physically
+			union.AssemblyLinearVelocity = root.CFrame.LookVector * SC.ThrowVelocity + Vector3.new(0, 8, 0)
+		else
+			dropModel:Destroy()
+		end
 	end
 
-	print(player.Name .. " dropped and threw scrap with F.")
+	print(player.Name .. " dropped 1 scrap plaque using F.")
 end)
 
 -- Initial piles
@@ -110,8 +229,12 @@ task.spawn(function()
 	while true do
 		task.wait(SC.RespawnCheckInterval)
 		local count = 0
-		for _ in pairs(activePiles) do
-			count += 1
+		for pile in pairs(activePiles) do
+			if pile and pile.Parent then
+				count += 1
+			else
+				activePiles[pile] = nil
+			end
 		end
 		if count < SC.MaxPiles then
 			spawnScrapPile()

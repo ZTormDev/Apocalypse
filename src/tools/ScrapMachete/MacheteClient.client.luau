@@ -1,5 +1,5 @@
 -- ReplicatedStorage.Scrap Machete.MacheteClient
--- Client target selection + swing/hit SFX + back holster. The server (CombatManager)
+-- Client target selection + swing/hit SFX + back holster + swing anim. The server (CombatManager)
 -- independently re-validates range/cooldown before applying damage; this only picks a target.
 local Tool = script.Parent
 local Players = game:GetService("Players")
@@ -32,8 +32,13 @@ local HOLSTER_NAME = "MacheteHolster"
 
 local lastAttack = 0
 
--- Picks the closest Mycomorph roughly in front of the player.
-local function findClosestMycomorph()
+-- Setup Attack Animation
+local attackAnim = Instance.new("Animation")
+attackAnim.AnimationId = "rbxassetid://522635514" -- Standard Roblox Melee Slash Animation for R15
+local attackTrack = nil
+
+-- Picks the closest Mycomorph or ScrapPile roughly in front of the player.
+local function findClosestTarget()
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root then
@@ -41,6 +46,8 @@ local function findClosestMycomorph()
 	end
 
 	local closest, closestDist = nil, RANGE
+
+	-- 1. Search tagged Mycomorph enemies
 	for _, model in ipairs(CollectionService:GetTagged(Tags.Mycomorph)) do
 		local mRoot = model.PrimaryPart
 		local humanoid = model:FindFirstChild("Humanoid")
@@ -55,12 +62,69 @@ local function findClosestMycomorph()
 			end
 		end
 	end
+
+	-- 2. Search ScrapPiles (minable models)
+	for _, model in ipairs(workspace:GetChildren()) do
+		if model.Name == "ScrapPile" then
+			local mRoot = model.PrimaryPart
+			if mRoot then
+				local toTarget = mRoot.Position - root.Position
+				local dist = toTarget.Magnitude
+				if dist <= closestDist and dist > 0 then
+					if root.CFrame.LookVector:Dot(toTarget.Unit) > CONE_DOT then
+						closest = model
+						closestDist = dist
+					end
+				end
+			end
+		end
+	end
+
 	return closest
 end
 
-local handle = Tool:FindFirstChild("Handle")
-local swingSound = handle and handle:FindFirstChild("Swing")
-local hitSound = handle and handle:FindFirstChild("Hit")
+-- Sound Management
+local handle = Tool:WaitForChild("Handle")
+local sounds = handle:WaitForChild("Sounds")
+
+local function playRandomSwing()
+	if not sounds then return end
+	local swingSounds = {}
+	for _, child in ipairs(sounds:GetChildren()) do
+		if string.find(child.Name, "Swing") then
+			table.insert(swingSounds, child)
+		end
+	end
+	if #swingSounds > 0 then
+		local s = swingSounds[math.random(1, #swingSounds)]
+		s:Play()
+	end
+end
+
+local function playRandomHit(isScrapHit: boolean)
+	if not sounds then return end
+	if isScrapHit then
+		local scrapHit = sounds:FindFirstChild("ScrapHit")
+		if scrapHit then
+			-- Random pitch variation between 0.85 and 1.15
+			scrapHit.PlaybackSpeed = math.random(85, 115) / 100
+			scrapHit:Play()
+		end
+	else
+		-- Flesh hits for enemies (Hit1, Hit2)
+		local hitSounds = {}
+		for _, child in ipairs(sounds:GetChildren()) do
+			-- Exclude ScrapHit from flesh hits list
+			if string.find(child.Name, "Hit") and child.Name ~= "ScrapHit" then
+				table.insert(hitSounds, child)
+			end
+		end
+		if #hitSounds > 0 then
+			local s = hitSounds[math.random(1, #hitSounds)]
+			s:Play()
+		end
+	end
+end
 
 Tool.Activated:Connect(function()
 	local now = os.clock()
@@ -69,16 +133,29 @@ Tool.Activated:Connect(function()
 	end
 	lastAttack = now
 
-	if swingSound then
-		swingSound:Play()
+	-- Suspend arm aim tracking during the swing animation
+	local char = player.Character
+	if char then
+		char:SetAttribute("IsAttackingMelee", true)
+		task.delay(0.35, function()
+			if char and char.Parent then
+				char:SetAttribute("IsAttackingMelee", false)
+			end
+		end)
 	end
 
-	local target = findClosestMycomorph()
+	-- Play swing sound and slash animation
+	playRandomSwing()
+	if attackTrack then
+		attackTrack.Priority = Enum.AnimationPriority.Action
+		attackTrack:Play()
+	end
+
+	local target = findClosestTarget()
 	if target then
 		macheteAttackEvent:FireServer(target)
-		if hitSound then
-			hitSound:Play()
-		end
+		local isScrap = (target.Name == "ScrapPile")
+		playRandomHit(isScrap)
 	end
 end)
 
@@ -86,15 +163,44 @@ end)
 Tool.Equipped:Connect(function()
 	applyGrip()
 	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
+
+	-- Play equip sound
+	local equipSound = sounds and sounds:FindFirstChild("Equip")
+	if equipSound then
+		equipSound:Play()
+	end
+
+	-- Load animation
+	local char = player.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+		attackTrack = animator:LoadAnimation(attackAnim)
+	end
 end)
 
 Tool.Unequipped:Connect(function()
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
+
+	local char = player.Character
+	if char then
+		char:SetAttribute("IsAttackingMelee", false)
+	end
+
+	-- Play unequip sound
+	local unequipSound = sounds and sounds:FindFirstChild("Unequip")
+	if unequipSound then
+		unequipSound:Play()
+	end
+
+	-- Clean animation
+	if attackTrack then
+		attackTrack:Stop()
+		attackTrack = nil
+	end
 end)
 
 -- Show the holster immediately once the tool lands in the backpack (starts unequipped).
--- Don't use player.CharacterAdded:Wait() here -- if the character already loaded, that event
--- already fired and Wait() would hang forever.
 if player.Character then
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 end
