@@ -12,39 +12,42 @@
     },
     "ReplicatedStorage": {
       "$ignoreUnknownInstances": true,
+      "Shared": {
+        "$path": "src/shared"
+      },
       "Scrap Machete": {
         "$className": "Tool",
         "$ignoreUnknownInstances": true,
         "MacheteClient": {
-          "$path": "src/shared/ScrapMachete/MacheteClient.client.luau"
+          "$path": "src/tools/ScrapMachete/MacheteClient.client.luau"
         }
       },
       "Improvised Pistol": {
         "$className": "Tool",
         "$ignoreUnknownInstances": true,
         "PistolClient": {
-          "$path": "src/shared/ImprovisedPistol/PistolClient.client.luau"
+          "$path": "src/tools/ImprovisedPistol/PistolClient.client.luau"
         }
       },
       "Scrap": {
         "$className": "Tool",
         "$ignoreUnknownInstances": true,
         "ScrapDropScript": {
-          "$path": "src/shared/Scrap/ScrapDropScript.client.luau"
+          "$path": "src/tools/Scrap/ScrapDropScript.client.luau"
         }
       },
       "Wall": {
         "$className": "Tool",
         "$ignoreUnknownInstances": true,
         "BlueprintClient": {
-          "$path": "src/shared/Wall/BlueprintClient.client.luau"
+          "$path": "src/tools/Wall/BlueprintClient.client.luau"
         }
       },
       "Electric Fence": {
         "$className": "Tool",
         "$ignoreUnknownInstances": true,
         "BlueprintClient": {
-          "$path": "src/shared/ElectricFence/BlueprintClient.client.luau"
+          "$path": "src/tools/ElectricFence/BlueprintClient.client.luau"
         }
       }
     }
