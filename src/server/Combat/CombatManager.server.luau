@@ -94,7 +94,7 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 
 							-- Add ProximityPrompt for players to collect it
 							local prompt = Instance.new("ProximityPrompt")
-							prompt.ActionText = "Recoger Placa"
+							prompt.ActionText = "Pick Up Plaque"
 							prompt.ObjectText = "Scrap"
 							prompt.MaxActivationDistance = 8
 							prompt.ClickablePrompt = false

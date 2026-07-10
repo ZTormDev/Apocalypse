@@ -21,17 +21,13 @@ RunService.Stepped:Connect(function()
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then return end
 
-	-- Check if the player is holding any tool
+	-- Arm aiming only applies to guns/pistols (Improvised Pistol)
 	local tool = character:FindFirstChildOfClass("Tool")
+	local isGun = tool and (tool.Name == "Improvised Pistol")
 	local shoulder = getShoulderJoint(character)
 	local upperTorso = character:FindFirstChild("UpperTorso")
 
-	-- Suspend aiming override during melee attacks to allow swing animations to display
-	if character:GetAttribute("IsAttackingMelee") == true then
-		return
-	end
-
-	if tool and shoulder and upperTorso then
+	if isGun and shoulder and upperTorso then
 		local shoulderWorldPos = upperTorso.CFrame:PointToWorldSpace(shoulder.C0.Position)
 		local mousePos = mouse.Hit.Position
 		local toMouse = mousePos - shoulderWorldPos
@@ -42,7 +38,6 @@ RunService.Stepped:Connect(function()
 			local localDir = upperTorso.CFrame:VectorToObjectSpace(toMouse)
 
 			-- Calculate yaw (horizontal angle) and pitch (vertical angle) relative to the front (0, 0, -1)
-			-- localDir.Z is negative in front, localDir.X is positive to the right
 			local yaw = math.atan2(localDir.X, -localDir.Z)
 			local pitch = math.atan2(localDir.Y, math.sqrt(localDir.X^2 + localDir.Z^2))
 
@@ -50,11 +45,10 @@ RunService.Stepped:Connect(function()
 			yaw = math.clamp(yaw, -MAX_ANGLE, MAX_ANGLE)
 			pitch = math.clamp(pitch, -MAX_ANGLE, MAX_ANGLE)
 
-			-- Apply to the joint Transform (R15 default arm points down, so we offset by 90 degrees on X)
+			-- Apply aiming directly to the joint Transform (R15 default arm points down, offset by 90 on X)
 			shoulder.Transform = CFrame.Angles(math.rad(90) + pitch, 0, yaw)
 		end
-	elseif shoulder then
-		-- Reset joint transform when no tool is held
-		shoulder.Transform = CFrame.new()
 	end
+	-- No else branch: for melee/no tool, never touch the shoulder so Roblox's
+	-- default animations (idle, walk, run, tool hold) drive it untouched.
 end)

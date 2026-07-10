@@ -1,5 +1,5 @@
 -- ReplicatedStorage.Scrap Machete.MacheteClient
--- Client target selection + swing/hit SFX + back holster + swing anim. The server (CombatManager)
+-- Client target selection + swing/hit SFX + back holster. The server (CombatManager)
 -- independently re-validates range/cooldown before applying damage; this only picks a target.
 local Tool = script.Parent
 local Players = game:GetService("Players")
@@ -31,11 +31,6 @@ local COOLDOWN = MACHETE.ClientCooldown
 local HOLSTER_NAME = "MacheteHolster"
 
 local lastAttack = 0
-
--- Setup Attack Animation
-local attackAnim = Instance.new("Animation")
-attackAnim.AnimationId = "rbxassetid://522635514" -- Standard Roblox Melee Slash Animation for R15
-local attackTrack = nil
 
 -- Picks the closest Mycomorph or ScrapPile roughly in front of the player.
 local function findClosestTarget()
@@ -133,23 +128,8 @@ Tool.Activated:Connect(function()
 	end
 	lastAttack = now
 
-	-- Suspend arm aim tracking during the swing animation
-	local char = player.Character
-	if char then
-		char:SetAttribute("IsAttackingMelee", true)
-		task.delay(0.35, function()
-			if char and char.Parent then
-				char:SetAttribute("IsAttackingMelee", false)
-			end
-		end)
-	end
-
-	-- Play swing sound and slash animation
+	-- Play swing sound
 	playRandomSwing()
-	if attackTrack then
-		attackTrack.Priority = Enum.AnimationPriority.Action
-		attackTrack:Play()
-	end
 
 	local target = findClosestTarget()
 	if target then
@@ -169,34 +149,15 @@ Tool.Equipped:Connect(function()
 	if equipSound then
 		equipSound:Play()
 	end
-
-	-- Load animation
-	local char = player.Character
-	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-		attackTrack = animator:LoadAnimation(attackAnim)
-	end
 end)
 
 Tool.Unequipped:Connect(function()
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 
-	local char = player.Character
-	if char then
-		char:SetAttribute("IsAttackingMelee", false)
-	end
-
 	-- Play unequip sound
 	local unequipSound = sounds and sounds:FindFirstChild("Unequip")
 	if unequipSound then
 		unequipSound:Play()
-	end
-
-	-- Clean animation
-	if attackTrack then
-		attackTrack:Stop()
-		attackTrack = nil
 	end
 end)
 

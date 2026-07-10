@@ -120,17 +120,31 @@ local function spawnScrapPile(pos: Vector3?): Model?
 	model:SetAttribute("Health", SC.MaxHealth)
 	model:SetAttribute("MaxHealth", SC.MaxHealth)
 
-	-- Billboard Health Bar Gui
+	-- Billboard Health Bar + Name Gui (always visible within range)
 	local bgui = Instance.new("BillboardGui")
 	bgui.Name = "HealthGui"
-	bgui.Size = UDim2.new(0, 80, 0, 8)
-	bgui.StudsOffset = Vector3.new(0, 3, 0)
+	bgui.Size = UDim2.new(0, 90, 0, 26)
+	bgui.StudsOffset = Vector3.new(0, 4.5, 0)
+	bgui.MaxDistance = 40 -- only render within a considerable range
 	bgui.AlwaysOnTop = true
 	bgui.Adornee = primaryPart
-	bgui.Enabled = false
+	bgui.Enabled = true
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, 0, 0, 14)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = "Scrap Junk"
+	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	nameLabel.TextStrokeTransparency = 0.5
+	nameLabel.Font = Enum.Font.SourceSansBold
+	nameLabel.TextScaled = true
+	nameLabel.Parent = bgui
 
 	local bg = Instance.new("Frame")
-	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.Name = "BarBackground"
+	bg.Position = UDim2.new(0, 0, 0, 18)
+	bg.Size = UDim2.new(1, 0, 0, 8)
 	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	bg.BorderSizePixel = 0
 	bg.Parent = bgui
@@ -152,12 +166,11 @@ local function spawnScrapPile(pos: Vector3?): Model?
 
 	bgui.Parent = model
 
-	-- Update HealthBar visibility and scaling on damage
+	-- Update the health bar fill on damage (always visible, name stays put)
 	model:GetAttributeChangedSignal("Health"):Connect(function()
 		local h = model:GetAttribute("Health") or 0
 		local maxH = model:GetAttribute("MaxHealth") or 100
 		fill.Size = UDim2.new(math.clamp(h / maxH, 0, 1), 0, 1, 0)
-		bgui.Enabled = (h < maxH)
 	end)
 
 	model.Parent = Workspace
@@ -194,7 +207,7 @@ dropScrapEvent.OnServerEvent:Connect(function(player)
 
 			-- Add ProximityPrompt for players to collect it
 			local prompt = Instance.new("ProximityPrompt")
-			prompt.ActionText = "Recoger Placa"
+			prompt.ActionText = "Pick Up Plaque"
 			prompt.ObjectText = "Scrap"
 			prompt.MaxActivationDistance = 8
 			prompt.ClickablePrompt = false

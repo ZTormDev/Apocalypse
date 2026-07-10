@@ -1,5 +1,5 @@
 -- ReplicatedStorage.Scrap.ScrapDropScript
--- While the Scrap tool is equipped, F drops one pile's worth (server handles the amount).
+-- While the Scrap tool is equipped, G drops one pile's worth (server handles the amount).
 local Tool = script.Parent
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,7 +16,7 @@ Tool.Equipped:Connect(function()
 		if processed then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.F then
+		if input.KeyCode == Enum.KeyCode.G then
 			dropEvent:FireServer()
 		end
 	end)

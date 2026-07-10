@@ -80,11 +80,11 @@ GameConfig.Scrap = {
 -- ---------------------------------------------------------------------------------------
 GameConfig.Machete = {
 	Damage = 25,
-	ServerRange = 8, -- authoritative hit range (a touch more generous for latency)
+	ServerRange = 10, -- authoritative hit range (a touch more generous for latency)
 	ServerCooldown = 0.55,
-	ClientRange = 7, -- client target-selection range
+	ClientRange = 9, -- client target-selection range
 	ClientCooldown = 0.6,
-	ClientConeDot = 0.3, -- ~70 degree forward cone for target selection
+	ClientConeDot = -0.5, -- ~120 degree forward cone for target selection
 }
 
 GameConfig.Pistol = {
