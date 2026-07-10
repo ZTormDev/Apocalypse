@@ -1,20 +1,24 @@
--- ServerScriptService.ScrapManager
-local Workspace = game:GetService("Workspace")
+-- ServerScriptService.Economy.ScrapManager
+-- Spawns physical Scrap piles out in the danger zone; players store them (E) as a stacking
+-- inventory Tool or throw one pile's worth back (F). Scrap read/write goes through ScrapWallet.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
-local MAX_PILES = 12
-local SPAWN_MIN_DIST = 90 -- far outside the dome, like fuel, so players have to venture out for it
-local SPAWN_MAX_DIST = 160
-local SCRAP_PER_PILE = 5
-local RESPAWN_CHECK_INTERVAL = 12
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Net = require(Shared:WaitForChild("Net"))
 
-local ScrapEvents = ReplicatedStorage:WaitForChild("ScrapEvents")
-local dropScrapEvent = ScrapEvents:WaitForChild("DropScrap")
-local ScrapWallet = require(script.Parent:WaitForChild("ScrapWallet"))
+local ServerScriptService = game:GetService("ServerScriptService")
+local Modules = ServerScriptService:WaitForChild("modules")
+local ScrapWallet = require(Modules:WaitForChild("ScrapWallet"))
 
-local activePiles = {} -- [part] = true
+local SC = GameConfig.Scrap
 
--- Clean up any leftover piles from previous runs/edit mode
+local dropScrapEvent = Net.event("ScrapEvents", "DropScrap")
+
+local activePiles: { [BasePart]: boolean } = {}
+
+-- Clean up any leftover piles from a previous run
 for _, child in ipairs(Workspace:GetChildren()) do
 	if child.Name == "ScrapPile" then
 		child:Destroy()
@@ -23,19 +27,19 @@ end
 
 local purifier = Workspace:WaitForChild("Purifier", 15)
 
-local function removeScrapPile(pile)
+local function removeScrapPile(pile: BasePart)
 	activePiles[pile] = nil
 	if pile and pile.Parent then
 		pile:Destroy()
 	end
 end
 
--- Physical scrap pile -- same interaction model as Biomass: walk up, store it in your
--- inventory (E) as a Tool, or throw it back out into the world (F).
-local function spawnScrapPile(pos)
+local function spawnScrapPile(pos: Vector3?): BasePart?
 	if not purifier then
 		purifier = Workspace:FindFirstChild("Purifier")
-		if not purifier then return nil end
+		if not purifier then
+			return nil
+		end
 	end
 
 	local pile = Instance.new("Part")
@@ -46,7 +50,7 @@ local function spawnScrapPile(pos)
 		pile.Position = pos
 	else
 		local angle = math.random() * math.pi * 2
-		local dist = math.random(SPAWN_MIN_DIST, SPAWN_MAX_DIST)
+		local dist = math.random(SC.SpawnMinDist, SC.SpawnMaxDist)
 		pile.Position = purifier.Position + Vector3.new(math.cos(angle) * dist, 2, math.sin(angle) * dist)
 	end
 
@@ -66,7 +70,7 @@ local function spawnScrapPile(pos)
 
 	prompt.Triggered:Connect(function(player)
 		removeScrapPile(pile)
-		ScrapWallet.Add(player, SCRAP_PER_PILE)
+		ScrapWallet.Add(player, SC.PerPile)
 		print(player.Name .. " stored scrap in their inventory.")
 	end)
 
@@ -75,36 +79,41 @@ local function spawnScrapPile(pos)
 	return pile
 end
 
--- Drop Tool (F): throws exactly one pile's worth back into the world, out of the stack
+-- Drop (F): throw exactly one pile's worth back into the world
 dropScrapEvent.OnServerEvent:Connect(function(player)
 	local char = player.Character
-	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	if not char or not char:FindFirstChild("HumanoidRootPart") then
+		return
+	end
 
-	if not ScrapWallet.TrySpend(player, SCRAP_PER_PILE) then return end
+	if not ScrapWallet.TrySpend(player, SC.PerPile) then
+		return
+	end
 
-	local spawnPos = char.HumanoidRootPart.Position + char.HumanoidRootPart.CFrame.LookVector * 4
+	local root = char.HumanoidRootPart
+	local spawnPos = root.Position + root.CFrame.LookVector * 4
 	local spawned = spawnScrapPile(spawnPos)
 	if spawned then
-		spawned.AssemblyLinearVelocity = char.HumanoidRootPart.CFrame.LookVector * 25 + Vector3.new(0, 10, 0)
+		spawned.AssemblyLinearVelocity = root.CFrame.LookVector * SC.ThrowVelocity + Vector3.new(0, 10, 0)
 	end
 
 	print(player.Name .. " dropped and threw scrap with F.")
 end)
 
 -- Initial piles
-for i = 1, MAX_PILES do
+for _ = 1, SC.MaxPiles do
 	spawnScrapPile()
 end
 
 -- Periodic top-up
 task.spawn(function()
 	while true do
-		task.wait(RESPAWN_CHECK_INTERVAL)
+		task.wait(SC.RespawnCheckInterval)
 		local count = 0
 		for _ in pairs(activePiles) do
-			count = count + 1
+			count += 1
 		end
-		if count < MAX_PILES then
+		if count < SC.MaxPiles then
 			spawnScrapPile()
 		end
 	end
