@@ -1,5 +1,12 @@
 # Refactor Roadmap: Scalable & Modular Architecture
 
+> **Status: implemented.** Phases 0-5 are done (see git history: the `Phase N:` commits).
+> Phase 3 (data-driven content) fell out of Phases 0-1 — enemies, structures, and weapons are
+> all config rows now, with no imperative variant branches left. Behavior was preserved
+> throughout; verify with `Testing_Checklist.md`. Module boundaries are documented in
+> `Architecture.md`.
+
+
 This roadmap plans a full pass over the existing codebase (built during the Phase 1-4 prototype
 and the subsequent asset/polish pass) to make it scalable, professional, and modular — without
 changing any observable gameplay behavior. It's organized so each phase can be done, tested, and

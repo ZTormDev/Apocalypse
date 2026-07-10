@@ -1,0 +1,8 @@
+# Lint config for selene (https://kampfkarren.github.io/selene/).
+# Install:  cargo install selene   (or grab a release binary)
+# Run:      selene src
+std = "roblox"
+
+[rules]
+# Roblox scripts legitimately read/write globals like `workspace`; keep the signal high.
+global_usage = "allow"
