@@ -43,7 +43,8 @@ local function createConsole()
 	console.Parent = Workspace
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Open Assembly Console [E]"
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = "Open Assembly Console"
 	prompt.ObjectText = "Assembly Console"
 	prompt.HoldDuration = 0.1
 	prompt.MaxActivationDistance = 10

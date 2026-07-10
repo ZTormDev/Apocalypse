@@ -207,6 +207,7 @@ dropScrapEvent.OnServerEvent:Connect(function(player)
 
 			-- Add ProximityPrompt for players to collect it
 			local prompt = Instance.new("ProximityPrompt")
+			prompt.Style = Enum.ProximityPromptStyle.Custom
 			prompt.ActionText = "Pick Up Plaque"
 			prompt.ObjectText = "Scrap"
 			prompt.MaxActivationDistance = 8

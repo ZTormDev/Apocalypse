@@ -58,7 +58,8 @@ local function spawnBiomass(pos: Vector3?): BasePart
 	biomassAttachment.Parent = canister
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Store in Inventory [E]"
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = "Store in Inventory"
 	prompt.ObjectText = "Spore Biomass"
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 8
