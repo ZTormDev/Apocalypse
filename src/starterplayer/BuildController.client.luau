@@ -8,13 +8,15 @@ local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 
-local BuildEvents = ReplicatedStorage:WaitForChild("BuildEvents")
-local craftItemEvent = BuildEvents:WaitForChild("CraftStructureItem")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Net = require(Shared:WaitForChild("Net"))
 
-local STRUCTURE_COSTS = {
-	["Wall"] = 20,
-	["Electric Fence"] = 40,
-}
+local craftItemEvent = Net.event("BuildEvents", "CraftStructureItem")
+
+-- Costs come straight from GameConfig.Structures -- the same table the server charges from,
+-- so the displayed price can never drift from the actual cost.
+local STRUCTURES = GameConfig.Structures
 
 -- Build menu GUI, opened from the Assembly Console
 local playerGui = player:WaitForChild("PlayerGui")
@@ -64,7 +66,7 @@ local function craftItem(structureType)
 end
 
 local function createCraftButton(structureType, position)
-	local cost = STRUCTURE_COSTS[structureType]
+	local cost = STRUCTURES[structureType].Cost
 	local button = Instance.new("TextButton")
 	button.Size = UDim2.new(0.9, 0, 0, 40)
 	button.Position = position

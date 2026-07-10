@@ -6,9 +6,11 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local BioRecallEvents = ReplicatedStorage:WaitForChild("BioRecallEvents")
-local triggeredEvent = BioRecallEvents:WaitForChild("BioRecallTriggered")
-local completeEvent = BioRecallEvents:WaitForChild("BioRecallComplete")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Net = require(Shared:WaitForChild("Net"))
+
+local triggeredEvent = Net.event("BioRecallEvents", "BioRecallTriggered")
+local completeEvent = Net.event("BioRecallEvents", "BioRecallComplete")
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "BioRecallUI"

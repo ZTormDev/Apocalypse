@@ -1,27 +1,38 @@
 -- ReplicatedStorage.Scrap Machete.MacheteClient
+-- Client target selection + swing/hit SFX + back holster. The server (CombatManager)
+-- independently re-validates range/cooldown before applying damage; this only picks a target.
 local Tool = script.Parent
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
-local player = Players.LocalPlayer
-local CombatEvents = ReplicatedStorage:WaitForChild("CombatEvents")
-local macheteAttackEvent = CombatEvents:WaitForChild("MacheteAttack")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Tags = require(Shared:WaitForChild("Tags"))
+local ToolEffects = require(Shared:WaitForChild("ToolEffects"))
+local Net = require(Shared:WaitForChild("Net"))
 
-local RANGE = 7
-local CONE_DOT = 0.3 -- roughly a 70-degree forward cone
-local COOLDOWN = 0.6
+local player = Players.LocalPlayer
+local macheteAttackEvent = Net.event("CombatEvents", "MacheteAttack")
+
+local MACHETE = GameConfig.Machete
+local RANGE = MACHETE.ClientRange
+local CONE_DOT = MACHETE.ClientConeDot
+local COOLDOWN = MACHETE.ClientCooldown
+local HOLSTER_NAME = "MacheteHolster"
+
 local lastAttack = 0
 
--- Picks the closest Mycomorph roughly in front of the player; the server independently
--- re-validates range/cooldown before applying any damage, this is just target selection.
+-- Picks the closest Mycomorph roughly in front of the player.
 local function findClosestMycomorph()
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return nil end
+	if not root then
+		return nil
+	end
 
 	local closest, closestDist = nil, RANGE
-	for _, model in ipairs(CollectionService:GetTagged("Mycomorph")) do
+	for _, model in ipairs(CollectionService:GetTagged(Tags.Mycomorph)) do
 		local mRoot = model.PrimaryPart
 		local humanoid = model:FindFirstChild("Humanoid")
 		if mRoot and humanoid and humanoid.Health > 0 then
@@ -44,67 +55,40 @@ local hitSound = handle and handle:FindFirstChild("Hit")
 
 Tool.Activated:Connect(function()
 	local now = os.clock()
-	if now - lastAttack < COOLDOWN then return end
+	if now - lastAttack < COOLDOWN then
+		return
+	end
 	lastAttack = now
 
-	if swingSound then swingSound:Play() end
+	if swingSound then
+		swingSound:Play()
+	end
 
 	local target = findClosestMycomorph()
 	if target then
 		macheteAttackEvent:FireServer(target)
-		if hitSound then hitSound:Play() end
+		if hitSound then
+			hitSound:Play()
+		end
 	end
 end)
 
--- Holster: show a copy of the blade on the player's back whenever the tool isn't equipped
-local HOLSTER_NAME = "MacheteHolster"
-
-local function removeHolster(char)
-	local existing = char and char:FindFirstChild(HOLSTER_NAME)
-	if existing then
-		existing:Destroy()
-	end
-end
-
-local function addHolster(char)
-	if not char then return end
-	removeHolster(char) -- avoid duplicates
-
-	local back = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-	local handle = Tool:FindFirstChild("Handle")
-	if not back or not handle then return end
-
-	local holster = handle:Clone()
-	holster.Name = HOLSTER_NAME
-	holster.Anchored = false
-	holster.CanCollide = false
-	holster.CanTouch = false
-	holster.CanQuery = false
-	holster.Massless = true
-	holster.CFrame = back.CFrame * CFrame.new(0, 0.2, 0.5) * CFrame.Angles(math.rad(100), 0, 0)
-	holster.Parent = char
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = back
-	weld.Part1 = holster
-	weld.Parent = holster
-end
-
+-- Show the blade on the player's back whenever the tool isn't equipped
 Tool.Equipped:Connect(function()
-	removeHolster(player.Character)
+	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
 end)
 
 Tool.Unequipped:Connect(function()
-	addHolster(player.Character)
+	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 end)
 
--- Show the holster immediately once the tool lands in the backpack (it starts unequipped).
--- Note: don't use `player.CharacterAdded:Wait()` here -- if the character already loaded before
--- this script started, that event already fired and Wait() would hang forever.
+-- Show the holster immediately once the tool lands in the backpack (starts unequipped).
+-- Don't use player.CharacterAdded:Wait() here -- if the character already loaded, that event
+-- already fired and Wait() would hang forever.
 if player.Character then
-	addHolster(player.Character)
+	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 end
 
 player.CharacterAdded:Connect(function(char)
-	addHolster(char)
+	ToolEffects.showHolster(Tool, char, HOLSTER_NAME)
 end)

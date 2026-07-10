@@ -1,18 +1,23 @@
 -- ReplicatedStorage.Improvised Pistol.PistolClient
+-- Sends only the aim direction; the server (CombatManager) does its own raycast and is the
+-- sole authority on ammo and damage. Everything here is cosmetic (muzzle flash + SFX).
 local Tool = script.Parent
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local Net = require(Shared:WaitForChild("Net"))
+
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
-local CombatEvents = ReplicatedStorage:WaitForChild("CombatEvents")
-local pistolFireEvent = CombatEvents:WaitForChild("PistolFire")
+local pistolFireEvent = Net.event("CombatEvents", "PistolFire")
 
-local COOLDOWN = 0.3
+local COOLDOWN = GameConfig.Pistol.ClientCooldown
 local lastFire = 0
 
--- Purely cosmetic muzzle flash/shell-eject/sound feedback (from the mesh asset's own
--- effect parts) -- this never touches damage or ammo, the server remains sole authority.
+-- Cosmetic muzzle flash / shell-eject / sound (from the mesh asset's own effect parts). Tied
+-- to that specific mesh's named children, so it stays here rather than in a generic helper.
 local handle = Tool:FindFirstChild("Handle")
 local shot = handle and handle:FindFirstChild("Shot")
 local dispenser = handle and handle:FindFirstChild("Dispenser")
@@ -63,20 +68,26 @@ local function playMuzzleFlash()
 end
 
 if sounds then
-	Tool.Equipped:Connect(function() sounds.Equip:Play() end)
-	Tool.Unequipped:Connect(function() sounds.Unequipped:Play() end)
+	Tool.Equipped:Connect(function()
+		sounds.Equip:Play()
+	end)
+	Tool.Unequipped:Connect(function()
+		sounds.Unequipped:Play()
+	end)
 end
 
--- Sends the aim direction only; the server does its own raycast and decides what (if
--- anything) got hit, and is the sole authority on ammo count and damage.
 Tool.Activated:Connect(function()
 	local now = os.clock()
-	if now - lastFire < COOLDOWN then return end
+	if now - lastFire < COOLDOWN then
+		return
+	end
 	lastFire = now
 
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return end
+	if not root then
+		return
+	end
 
 	local aimPoint = mouse.Hit and mouse.Hit.Position or (root.Position + root.CFrame.LookVector * 100)
 	local direction = aimPoint - root.Position
@@ -87,6 +98,8 @@ Tool.Activated:Connect(function()
 	end
 
 	pistolFireEvent:FireServer(direction)
-	if sounds then sounds.Activated:Play() end
+	if sounds then
+		sounds.Activated:Play()
+	end
 	task.spawn(playMuzzleFlash)
 end)
