@@ -110,9 +110,11 @@ pistolFireEvent.OnServerEvent:Connect(function(player, direction)
 	params.FilterDescendantsInstances = { char }
 
 	local origin = root.Position + Vector3.new(0, 1, 0)
+	local targetPosition = origin + direction * PISTOL.Range
 	local result = workspace:Raycast(origin, direction * PISTOL.Range, params)
 
 	if result then
+		targetPosition = result.Position
 		local hitPart = result.Instance
 		local model = hitPart:FindFirstAncestorOfClass("Model")
 		if model and CollectionService:HasTag(model, Tags.Mycomorph) then
@@ -122,6 +124,9 @@ pistolFireEvent.OnServerEvent:Connect(function(player, direction)
 			end
 		end
 	end
+
+	-- Replicate the shot to all clients for visual tracers
+	pistolFireEvent:FireAllClients(player, origin, targetPosition)
 end)
 
 Players.PlayerRemoving:Connect(function(player)

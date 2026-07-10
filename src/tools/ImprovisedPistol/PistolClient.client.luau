@@ -103,6 +103,15 @@ Tool.Activated:Connect(function()
 		return
 	end
 
+	-- Check if player has ammo before firing effects
+	local ammo = player:GetAttribute("PistolAmmo") or 0
+	if ammo <= 0 then
+		if sounds and sounds:FindFirstChild("Empty") then
+			sounds.Empty:Play()
+		end
+		return
+	end
+
 	local aimPoint = mouse.Hit and mouse.Hit.Position or (root.Position + root.CFrame.LookVector * 100)
 	local direction = aimPoint - root.Position
 	if direction.Magnitude > 0 then
