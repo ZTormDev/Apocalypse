@@ -5,10 +5,63 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 player.CharacterAdded:Connect(function(char)
 	character = char
+end)
+
+local localMask = nil
+
+local function updateLocalGasMask(isOutside)
+	if not character then
+		return
+	end
+	if isOutside then
+		-- If a gas mask (local or server) already exists in the character, do nothing
+		if character:FindFirstChild("GasMask") then
+			return
+		end
+
+		local maskAsset = ReplicatedStorage:FindFirstChild("GasMask")
+		if maskAsset then
+			localMask = maskAsset:Clone()
+			localMask.Name = "GasMask"
+			localMask:SetAttribute("IsLocal", true)
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then
+				humanoid:AddAccessory(localMask)
+			end
+		end
+	else
+		if localMask then
+			localMask:Destroy()
+			localMask = nil
+		end
+	end
+end
+
+local function setupCharacterConnections(char)
+	char.ChildAdded:Connect(function(child)
+		if child.Name == "GasMask" and not child:GetAttribute("IsLocal") then
+			-- The server replicated the real accessory; destroy our local predictive clone
+			if localMask then
+				localMask:Destroy()
+				localMask = nil
+			end
+		end
+	end)
+end
+
+if player.Character then
+	setupCharacterConnections(player.Character)
+end
+player.CharacterAdded:Connect(function(char)
+	character = char
+	setupCharacterConnections(char)
 end)
 
 local stateFolder = ReplicatedStorage:WaitForChild("SporeTideState")
@@ -148,60 +201,91 @@ local function getScrapAmount()
 end
 
 -- Gameplay values are computed server-side (ReplicatedStorage attribute on the Player);
--- this script only reads them for the UI and cosmetic effects, it never deals damage itself.
-local filterOxygen = player:GetAttribute("FilterOxygen") or 100.0
+-- this script predicts them locally for instant visual feedback and smooth UI bar scaling,
+-- then reconciles them with incoming server updates.
+local predictedOxygen = player:GetAttribute("FilterOxygen") or 100.0
 
 player:GetAttributeChangedSignal("FilterOxygen"):Connect(function()
-	filterOxygen = player:GetAttribute("FilterOxygen") or 100.0
-end)
-
--- Cosmetic-only loop: toggles the toxic screen tint based on dome distance
-task.spawn(function()
-	while true do
-		task.wait(0.5)
-
-		if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
-			local root = character.HumanoidRootPart
-			local humanoid = character.Humanoid
-
-			if humanoid.Health > 0 then
-				local distance = (root.Position - purifier.Position).Magnitude
-				local domeRadius = stateFolder:GetAttribute("DomeRadius") or 50.0
-
-				if distance > domeRadius then
-					TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
-						TintColor = Color3.fromRGB(150, 220, 150),
-						Saturation = -0.4,
-						Contrast = 0.1
-					}):Play()
-				else
-					TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
-						TintColor = Color3.fromRGB(255, 255, 255),
-						Saturation = 0,
-						Contrast = 0
-					}):Play()
-				end
-			end
-		end
+	local serverOxygen = player:GetAttribute("FilterOxygen") or 100.0
+	-- Smoothly reconcile to avoid visible UI jumps, unless the divergence is massive (e.g. respawn/recharge)
+	if math.abs(predictedOxygen - serverOxygen) > 10 then
+		predictedOxygen = serverOxygen
+	else
+		predictedOxygen = predictedOxygen * 0.75 + serverOxygen * 0.25
 	end
 end)
 
--- UI Update loop
+-- Screen tint management (called during render step to align with prediction)
+local currentScreenTint = "safe"
+local function updateScreenTint(isOutside)
+	if isOutside and currentScreenTint ~= "toxic" then
+		currentScreenTint = "toxic"
+		TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
+			TintColor = Color3.fromRGB(150, 220, 150),
+			Saturation = -0.4,
+			Contrast = 0.1
+		}):Play()
+	elseif not isOutside and currentScreenTint ~= "safe" then
+		currentScreenTint = "safe"
+		TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
+			TintColor = Color3.fromRGB(255, 255, 255),
+			Saturation = 0,
+			Contrast = 0
+		}):Play()
+	end
+end
+
+local lastUpdateTime = os.clock()
+
+-- UI Update & Prediction loop
 RunService.RenderStepped:Connect(function()
-	-- Update time text
+	local now = os.clock()
+	local dt = now - lastUpdateTime
+	lastUpdateTime = now
+
+	-- 1. Predict local oxygen & gas mask & screen tint
+	local isOutside = false
+	if character and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid") then
+		local root = character.HumanoidRootPart
+		local humanoid = character.Humanoid
+
+		if humanoid.Health > 0 then
+			local distance = (root.Position - purifier.Position).Magnitude
+			local domeRadius = stateFolder:GetAttribute("DomeRadius") or 50.0
+			isOutside = distance > domeRadius
+
+			-- Predict gas mask equipment
+			updateLocalGasMask(isOutside)
+
+			-- Predict screen tint
+			updateScreenTint(isOutside)
+
+			-- Predict oxygen consumption
+			local drainRate = GameConfig.Oxygen.DrainPerTick / GameConfig.Oxygen.TickInterval
+			local rechargeRate = GameConfig.Oxygen.RechargePerTick / GameConfig.Oxygen.TickInterval
+
+			if isOutside then
+				predictedOxygen = math.max(0, predictedOxygen - drainRate * dt)
+			else
+				predictedOxygen = math.min(100, predictedOxygen + rechargeRate * dt)
+			end
+		end
+	end
+
+	-- 2. Update time text
 	local timeOfDay = stateFolder:GetAttribute("TimeOfDay") or 6.0
 	local dayNum = stateFolder:GetAttribute("DayNumber") or 1
 	local hours = math.floor(timeOfDay)
 	local minutes = math.floor((timeOfDay - hours) * 60)
 	infoText.Text = string.format("Day %d - %02d:%02d", dayNum, hours, minutes)
 
-	-- Update bars
+	-- 3. Update bars
 	local fuel = stateFolder:GetAttribute("PurifierFuel") or 100.0
 	local maxFuel = stateFolder:GetAttribute("PurifierMaxFuel") or 100.0
 	local purifierHealth = stateFolder:GetAttribute("PurifierHealth") or 100.0
 	local maxHealth = stateFolder:GetAttribute("PurifierMaxHealth") or 100.0
 
-	local filterPct = math.clamp(filterOxygen / 100, 0, 1)
+	local filterPct = math.clamp(predictedOxygen / 100, 0, 1)
 	local fuelPct = math.clamp(fuel / maxFuel, 0, 1)
 	local healthPct = math.clamp(purifierHealth / maxHealth, 0, 1)
 

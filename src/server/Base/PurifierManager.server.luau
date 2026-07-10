@@ -131,8 +131,24 @@ task.spawn(function()
 					if oxygen <= 0 then
 						humanoid:TakeDamage(OX.ToxicDamagePerTick)
 					end
+
+					-- Equip gas mask if not already wearing it
+					if not char:FindFirstChild("GasMask") then
+						local maskAsset = ReplicatedStorage:FindFirstChild("GasMask")
+						if maskAsset then
+							local maskClone = maskAsset:Clone()
+							maskClone.Name = "GasMask"
+							humanoid:AddAccessory(maskClone)
+						end
+					end
 				else
 					oxygen = math.min(OX.Max, oxygen + OX.RechargePerTick)
+
+					-- Remove gas mask if wearing it
+					local mask = char:FindFirstChild("GasMask")
+					if mask then
+						mask:Destroy()
+					end
 				end
 
 				playerFilterOxygen[player] = oxygen
