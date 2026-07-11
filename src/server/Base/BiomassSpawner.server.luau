@@ -1,8 +1,8 @@
 -- ServerScriptService.Base.BiomassSpawner
--- Spawns Biomass Catalyst canisters out in the danger zone, lets players store them (E) or
--- throw them back (F), and draws the energy beam from an in-range canister to the Purifier.
--- The live canister set is shared with PurifierManager (which absorbs them into fuel) through
--- BiomassRegistry.
+-- Owns Biomass drop-back (G) and the energy beam from an in-range canister to the Purifier.
+-- Canisters themselves are now created by the central Points-based SpawnManager (via
+-- BiomassFactory); this script no longer runs a spawn loop. The live canister set is shared
+-- with PurifierManager (which absorbs them into fuel) through BiomassRegistry.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -13,7 +13,7 @@ local Net = require(Shared:WaitForChild("Net"))
 local ServerScriptService = game:GetService("ServerScriptService")
 local Modules = ServerScriptService:WaitForChild("modules")
 local BiomassRegistry = require(Modules:WaitForChild("BiomassRegistry"))
-local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
+local BiomassFactory = require(Modules:WaitForChild("BiomassFactory"))
 
 local BM = GameConfig.Biomass
 local RECHARGE_RANGE = GameConfig.Purifier.RechargeRange
@@ -29,88 +29,6 @@ for _, child in ipairs(Workspace:GetChildren()) do
 	end
 end
 
-local function spawnBiomass(pos: Vector3?): BasePart
-	local canister = Instance.new("Part")
-	canister.Name = "BiomassCatalyst"
-	canister.Size = Vector3.new(1.8, 1.8, 1.8)
-
-	if pos then
-		canister.Position = pos
-	else
-		local angle = math.random() * math.pi * 2
-		local dist = math.random(BM.SpawnMinDist, BM.SpawnMaxDist)
-		canister.Position = purifier.Position + Vector3.new(math.cos(angle) * dist, 5, math.sin(angle) * dist)
-	end
-
-	canister.Anchored = false
-	canister.CanCollide = true
-	canister.Friction = 0.8
-	canister.Color = Color3.fromRGB(0, 255, 0)
-	canister.Material = Enum.Material.Neon
-
-	local light = Instance.new("PointLight")
-	light.Color = Color3.fromRGB(0, 255, 0)
-	light.Range = 8
-	light.Brightness = 1.5
-	light.Parent = canister
-
-	local biomassAttachment = Instance.new("Attachment")
-	biomassAttachment.Name = "BiomassAttachment"
-	biomassAttachment.Parent = canister
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Style = Enum.ProximityPromptStyle.Custom
-	prompt.ActionText = "Store in Inventory"
-	prompt.ObjectText = "Spore Biomass"
-	prompt.HoldDuration = 0 -- instant press, no hold
-	prompt.MaxActivationDistance = 8
-	prompt.ClickablePrompt = false
-	prompt.Parent = canister
-
-	prompt.Triggered:Connect(function(player)
-		local toolTemplate = ReplicatedStorage:FindFirstChild("Spore Biomass")
-		if not toolTemplate then
-			return
-		end
-
-		-- Stop tracking it immediately so the Purifier absorption loop and the beam-drawing
-		-- loop don't keep acting on a canister that's already mid-pickup -- but untrack (NOT
-		-- remove), because remove() destroys the part, which would orphan it out of Workspace
-		-- and the pickup animation would then play on an invisible, unreplicated object.
-		BiomassRegistry.untrack(canister)
-		local existingBeam = canister:FindFirstChild("SporeLinkBeam")
-		if existingBeam then
-			existingBeam:Destroy()
-		end
-
-		PickupVfx.absorb(canister, prompt, player, function()
-			canister:Destroy()
-			local clone = toolTemplate:Clone()
-			clone.Parent = player:WaitForChild("Backpack")
-			print(player.Name .. " stored biomass in their inventory.")
-		end)
-	end)
-
-	canister.Parent = Workspace
-	BiomassRegistry.add(canister)
-	return canister
-end
-
--- Initial canisters
-for _ = 1, BM.InitialCount do
-	spawnBiomass()
-end
-
--- Periodic top-up
-task.spawn(function()
-	while true do
-		task.wait(BM.RespawnCheckInterval)
-		if BiomassRegistry.count() < BM.MaxCount then
-			spawnBiomass()
-		end
-	end
-end)
-
 -- Drop (G): throw one canister forward out of the held Spore Biomass tool
 dropBiomassEvent.OnServerEvent:Connect(function(player)
 	local char = player.Character
@@ -123,7 +41,7 @@ dropBiomassEvent.OnServerEvent:Connect(function(player)
 		tool:Destroy()
 		local root = char.HumanoidRootPart
 		local spawnPos = root.Position + root.CFrame.LookVector * 4
-		local spawned = spawnBiomass(spawnPos)
+		local spawned = BiomassFactory.spawn(spawnPos)
 		spawned.AssemblyLinearVelocity = root.CFrame.LookVector * BM.ThrowVelocity + Vector3.new(0, 10, 0)
 		print(player.Name .. " dropped and threw biomass with G.")
 	end

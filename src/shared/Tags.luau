@@ -6,6 +6,8 @@ local Tags = {
 	Mycomorph = "Mycomorph",
 	Structure = "Structure",
 	ElectricFence = "ElectricFence",
+	ItemSpawnPoint = "ItemSpawnPoint",
+	ScrapSpawnPoint = "ScrapSpawnPoint",
 }
 
 return Tags

@@ -49,6 +49,27 @@
         "BlueprintClient": {
           "$path": "src/tools/_shared/BlueprintClient.client.luau"
         }
+      },
+      "Bandage": {
+        "$className": "Tool",
+        "$ignoreUnknownInstances": true,
+        "ConsumableClient": {
+          "$path": "src/tools/_shared/ConsumableClient.client.luau"
+        }
+      },
+      "Drink": {
+        "$className": "Tool",
+        "$ignoreUnknownInstances": true,
+        "ConsumableClient": {
+          "$path": "src/tools/_shared/ConsumableClient.client.luau"
+        }
+      },
+      "Food": {
+        "$className": "Tool",
+        "$ignoreUnknownInstances": true,
+        "ConsumableClient": {
+          "$path": "src/tools/_shared/ConsumableClient.client.luau"
+        }
       }
     }
   }

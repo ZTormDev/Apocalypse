@@ -90,7 +90,7 @@ end
 
 -- Frame container
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 250, 0, 185)
+frame.Size = UDim2.new(0, 250, 0, 250)
 frame.Position = UDim2.new(0, 20, 0.5, -70)
 frame.BackgroundTransparency = 0.5
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -164,11 +164,14 @@ end
 local maskFill, maskLabel = createProgressBar("Mask", UDim2.new(0.05, 0, 0, 60), Color3.fromRGB(0, 255, 120), "Mask Filter")
 local fuelFill, fuelLabel = createProgressBar("Fuel", UDim2.new(0.05, 0, 0, 90), Color3.fromRGB(0, 170, 255), "Dome Fuel")
 local healthFill, healthLabel = createProgressBar("Health", UDim2.new(0.05, 0, 0, 120), Color3.fromRGB(255, 60, 60), "Purifier Health")
+-- Player survival stats (server-authoritative: Humanoid.Health + Player "Hunger" attribute)
+local playerHealthFill, playerHealthLabel = createProgressBar("PlayerHealth", UDim2.new(0.05, 0, 0, 150), Color3.fromRGB(80, 220, 80), "Health")
+local hungerFill, hungerLabel = createProgressBar("Hunger", UDim2.new(0.05, 0, 0, 180), Color3.fromRGB(240, 160, 60), "Hunger")
 
 -- Ammo readout (server-authoritative, replicated via a Player attribute)
 local ammoLabel = Instance.new("TextLabel")
 ammoLabel.Size = UDim2.new(0.9, 0, 0, 16)
-ammoLabel.Position = UDim2.new(0.05, 0, 0, 145)
+ammoLabel.Position = UDim2.new(0.05, 0, 0, 212)
 ammoLabel.BackgroundTransparency = 1
 ammoLabel.Text = "Ammo: --"
 ammoLabel.TextColor3 = Color3.fromRGB(255, 210, 90)
@@ -181,7 +184,7 @@ ammoLabel.Parent = frame
 -- (Backpack or equipped in Character), there's no leaderstat/attribute to listen to directly
 local scrapLabel = Instance.new("TextLabel")
 scrapLabel.Size = UDim2.new(0.9, 0, 0, 16)
-scrapLabel.Position = UDim2.new(0.05, 0, 0, 163)
+scrapLabel.Position = UDim2.new(0.05, 0, 0, 230)
 scrapLabel.BackgroundTransparency = 1
 scrapLabel.Text = "Scrap: 0"
 scrapLabel.TextColor3 = Color3.fromRGB(190, 180, 160)
@@ -302,4 +305,23 @@ RunService.RenderStepped:Connect(function()
 	ammoLabel.Text = "Ammo: " .. (ammo and tostring(ammo) or "--")
 
 	scrapLabel.Text = "Scrap: " .. getScrapAmount()
+
+	-- 4. Player survival stats
+	local survivalMax = GameConfig.Survival
+	local playerHp, playerMaxHp = 0, survivalMax.MaxHealth
+	if character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			playerHp = humanoid.Health
+			playerMaxHp = humanoid.MaxHealth
+		end
+	end
+	local hpPct = math.clamp(playerHp / playerMaxHp, 0, 1)
+	playerHealthFill.Size = UDim2.new(hpPct, 0, 1, 0)
+	playerHealthLabel.Text = string.format("Health: %d%%", math.round(hpPct * 100))
+
+	local hunger = player:GetAttribute("Hunger") or survivalMax.MaxHunger
+	local hungerPct = math.clamp(hunger / survivalMax.MaxHunger, 0, 1)
+	hungerFill.Size = UDim2.new(hungerPct, 0, 1, 0)
+	hungerLabel.Text = string.format("Hunger: %d%%", math.round(hungerPct * 100))
 end)

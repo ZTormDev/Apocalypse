@@ -76,6 +76,66 @@ GameConfig.Scrap = {
 }
 
 -- ---------------------------------------------------------------------------------------
+-- Survival: player Health (Humanoid.Health) + Hunger (Player "Hunger" attribute, 0-100).
+-- Both are server-authoritative; the client HUD only reads them.
+-- ---------------------------------------------------------------------------------------
+GameConfig.Survival = {
+	MaxHealth = 100,
+	MaxHunger = 100,
+	TickInterval = 1.0, -- seconds per survival tick
+
+	HungerDrainPerTick = 0.6, -- baseline hunger lost per tick while alive
+	SprintHungerMultiplier = 2.5, -- hunger drains this much faster while sprinting
+
+	StarveDamagePerTick = 3, -- health lost per tick once hunger hits 0
+	HealthRegenPerTick = 1.5, -- health regained per tick while well-fed
+	HungerRegenThreshold = 50, -- hunger must be above this for health to regen
+}
+
+-- Consumable tools: hold left-click for HoldTime seconds, then apply the effect.
+-- Bandage restores Health; Drink/Food restore Hunger.
+GameConfig.Consumables = {
+	["Bandage"] = { HoldTime = 5, Heal = 25 },
+	["Drink"] = { HoldTime = 3, Hunger = 20 },
+	["Food"] = { HoldTime = 3, Hunger = 40 },
+}
+
+-- One "Pistol Ammo" box grants this much to the player's PistolAmmo attribute.
+GameConfig.Ammo = {
+	PerBox = 30,
+}
+
+-- ---------------------------------------------------------------------------------------
+-- Central spawn system (SpawnManager). Loot spawns at tagged Points in the Workspace,
+-- not in a hardcoded ring. Two point kinds: ItemSpawnPoint and ScrapSpawnPoint.
+-- ---------------------------------------------------------------------------------------
+GameConfig.Spawning = {
+	TickInterval = 5, -- seconds between spawn rolls across all points
+	PositionJitter = 3, -- studs of random horizontal offset from the point's center
+
+	ItemPoint = {
+		MaxPerPoint = 2, -- max live items a single item point keeps around
+		SpawnChance = 0.5, -- probability, per tick, to try spawning at a point below max
+	},
+	ScrapPoint = {
+		MaxPerPoint = 1, -- one scrap pile per point at a time
+		SpawnChance = 0.6,
+	},
+}
+
+-- Weighted loot table for ItemSpawnPoints. `kind` selects the spawn factory:
+--   "tool"    -> ItemPickupFactory (clones the named ReplicatedStorage Tool as a world pickup)
+--   "biomass" -> BiomassFactory (the green fuel canister)
+GameConfig.LootTable = {
+	{ name = "Pistol Ammo", kind = "tool", weight = 3 },
+	{ name = "Scrap Machete", kind = "tool", weight = 1 },
+	{ name = "Bandage", kind = "tool", weight = 3 },
+	{ name = "Drink", kind = "tool", weight = 3 },
+	{ name = "Food", kind = "tool", weight = 3 },
+	{ name = "Biomass", kind = "biomass", weight = 2 },
+}
+
+-- ---------------------------------------------------------------------------------------
 -- Player movement
 -- ---------------------------------------------------------------------------------------
 GameConfig.Player = {
