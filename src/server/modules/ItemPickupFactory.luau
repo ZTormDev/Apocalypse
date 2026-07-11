@@ -13,6 +13,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
 local Modules = script.Parent
 local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
+local InventoryService = require(Modules:WaitForChild("InventoryService"))
 
 local ItemPickupFactory = {}
 
@@ -50,6 +51,10 @@ function ItemPickupFactory.spawn(toolName: string, pos: Vector3): BasePart?
 	prompt.Triggered:Connect(function(player)
 		if worldItem.Parent ~= Workspace then
 			return -- already claimed
+		end
+		-- Ammo stacks into PistolAmmo (no slot); other tools need inventory room.
+		if toolName ~= AMMO_TOOL and not InventoryService.canAccept(player, toolName) then
+			return -- belt + backpack full: can't pick up
 		end
 		PickupVfx.absorb(worldItem, prompt, player, function()
 			worldItem:Destroy()

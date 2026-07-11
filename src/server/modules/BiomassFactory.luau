@@ -10,19 +10,31 @@ local Workspace = game:GetService("Workspace")
 local Modules = script.Parent
 local BiomassRegistry = require(Modules:WaitForChild("BiomassRegistry"))
 local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
+local InventoryService = require(Modules:WaitForChild("InventoryService"))
 
 local BiomassFactory = {}
 
 function BiomassFactory.spawn(pos: Vector3): BasePart
-	local canister = Instance.new("Part")
+	-- The world canister uses the SAME visual as the held Spore Biomass tool (clone its Handle),
+	-- so a dropped/spawned canister and the equipped tool look identical. Falls back to a plain
+	-- green cube if the tool/Handle is missing.
+	local canister: BasePart
+	local template = ReplicatedStorage:FindFirstChild("Spore Biomass")
+	local handleTemplate = template and template:FindFirstChild("Handle")
+	if handleTemplate and handleTemplate:IsA("BasePart") then
+		canister = handleTemplate:Clone()
+	else
+		canister = Instance.new("Part")
+		canister.Size = Vector3.new(1.8, 1.8, 1.8)
+		canister.Color = Color3.fromRGB(0, 255, 0)
+		canister.Material = Enum.Material.Neon
+	end
 	canister.Name = "BiomassCatalyst"
-	canister.Size = Vector3.new(1.8, 1.8, 1.8)
-	canister.Position = pos
 	canister.Anchored = false
 	canister.CanCollide = true
+	canister.Massless = false
 	canister.Friction = 0.8
-	canister.Color = Color3.fromRGB(0, 255, 0)
-	canister.Material = Enum.Material.Neon
+	canister.CFrame = CFrame.new(pos)
 
 	local light = Instance.new("PointLight")
 	light.Color = Color3.fromRGB(0, 255, 0)
@@ -47,6 +59,9 @@ function BiomassFactory.spawn(pos: Vector3): BasePart
 		local toolTemplate = ReplicatedStorage:FindFirstChild("Spore Biomass")
 		if not toolTemplate then
 			return
+		end
+		if not InventoryService.canAccept(player, "Spore Biomass") then
+			return -- belt + backpack full: can't pick up
 		end
 
 		-- Untrack (NOT remove -> remove() destroys the part, orphaning it out of Workspace so

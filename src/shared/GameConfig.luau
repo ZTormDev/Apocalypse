@@ -105,6 +105,13 @@ GameConfig.Ammo = {
 	PerBox = 30,
 }
 
+-- Inventory partition: the Belt (hotbar, always visible, the only equippable area) and the
+-- Backpack (opened with B). Stacking tools (Scrap, Pistol Ammo) occupy 1 slot regardless of Amount.
+GameConfig.Inventory = {
+	BeltSize = 5,
+	BackpackSize = 10,
+}
+
 -- ---------------------------------------------------------------------------------------
 -- Central spawn system (SpawnManager). Loot spawns at tagged Points in the Workspace,
 -- not in a hardcoded ring. Two point kinds: ItemSpawnPoint and ScrapSpawnPoint.

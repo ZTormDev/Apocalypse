@@ -20,6 +20,13 @@ local function setupCharacter(character: Model)
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	humanoid.MaxHealth = SV.MaxHealth
 	humanoid.Health = SV.MaxHealth
+	-- Reset hunger on every (re)spawn -- otherwise a player who died starving respawns with
+	-- Hunger still at 0 and immediately starves again, an endless death loop (which also made
+	-- Bio-Recall fire on repeat and wipe every zombie the moment it spawned).
+	local player = Players:GetPlayerFromCharacter(character)
+	if player then
+		player:SetAttribute("Hunger", SV.MaxHunger)
+	end
 end
 
 local function setupPlayer(player: Player)

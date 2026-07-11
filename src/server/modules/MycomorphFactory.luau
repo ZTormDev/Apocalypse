@@ -1,9 +1,9 @@
 -- ServerScriptService.modules.MycomorphFactory
--- Data-driven Wildling builder. Reads its stats (health, speed, colors, display name) from
--- GameConfig.Enemies.Variants, so adding a new enemy variant is a new config row -- no code
--- change here. Builds a robust R6-hybrid crawler with a Humanoid, spore VFX, and a billboard
--- health bar, parents it to the Workspace, tags it, and returns the model. The caller owns
--- tracking it in the active list.
+-- Data-driven Wildling builder. Clones a real R15 rig template from ReplicatedStorage.EnemyModels
+-- (one per variant key: "Basic", "Fast"), then applies the variant's stats (health, speed,
+-- display name) from GameConfig.Enemies.Variants and adds a billboard health bar. The rig keeps
+-- its own appearance and Animate script; the game (MycomorphManager) drives it via Humanoid:MoveTo.
+-- The caller owns tracking the returned model in the active list.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
@@ -30,8 +30,58 @@ function MycomorphFactory.pickVariantKey(): string
 			return key
 		end
 	end
-	-- Fallback (floating-point edge): return any key
 	return (next(variants))
+end
+
+local function getTemplate(variantKey: string): Model?
+	local folder = ReplicatedStorage:FindFirstChild("EnemyModels")
+	local template = folder and folder:FindFirstChild(variantKey)
+	if template and template:IsA("Model") then
+		return template
+	end
+	return nil
+end
+
+local function addHealthBar(char: Model, humanoid: Humanoid)
+	local adornee = char:FindFirstChild("Head") or char.PrimaryPart
+	if not adornee then
+		return
+	end
+
+	local bgui = Instance.new("BillboardGui")
+	bgui.Size = UDim2.new(4, 0, 0.6, 0)
+	bgui.AlwaysOnTop = true
+	bgui.StudsOffset = Vector3.new(0, 2.5, 0)
+	bgui.MaxDistance = 60
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 1, 0)
+	frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	frame.BorderSizePixel = 0
+	frame.Parent = bgui
+	local fc = Instance.new("UICorner")
+	fc.CornerRadius = UDim.new(0, 3)
+	fc.Parent = frame
+
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, 0, 1, 0)
+	bar.BackgroundColor3 = Color3.fromRGB(220, 40, 40)
+	bar.BorderSizePixel = 0
+	bar.Parent = frame
+	local bc = Instance.new("UICorner")
+	bc.CornerRadius = UDim.new(0, 3)
+	bc.Parent = bar
+
+	bgui.Parent = adornee
+
+	local despawnDelay = GameConfig.Enemies.DespawnDelay
+	humanoid.HealthChanged:Connect(function(health)
+		bar.Size = UDim2.new(math.clamp(health / humanoid.MaxHealth, 0, 1), 0, 1, 0)
+		if health <= 0 then
+			task.wait(despawnDelay)
+			char:Destroy()
+		end
+	end)
 end
 
 function MycomorphFactory.create(variantKey: string, spawnPos: Vector3): Model?
@@ -39,103 +89,41 @@ function MycomorphFactory.create(variantKey: string, spawnPos: Vector3): Model?
 	if not def then
 		return nil
 	end
+	local template = getTemplate(variantKey)
+	if not template then
+		warn("MycomorphFactory: no EnemyModels template for variant " .. tostring(variantKey))
+		return nil
+	end
 
-	local char = Instance.new("Model")
+	local char = template:Clone()
 	char.Name = def.DisplayName
 
-	-- HumanoidRootPart (PrimaryPart)
-	local root = Instance.new("Part")
-	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(2, 2, 2)
-	root.Position = spawnPos + Vector3.new(0, 2, 0)
-	root.Transparency = 1
-	root.CanCollide = true
-	root.Parent = char
-	char.PrimaryPart = root
+	-- Make sure nothing is anchored so the Humanoid can walk it.
+	for _, p in ipairs(char:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+		end
+	end
 
-	-- Torso (Fungal Body)
-	local torso = Instance.new("Part")
-	torso.Name = "Torso"
-	torso.Size = Vector3.new(2.2, 2.5, 2.2)
-	torso.Position = root.Position
-	torso.Color = def.TorsoColor
-	torso.Material = Enum.Material.Mud
-	torso.CanCollide = true
-	torso.Parent = char
-
-	local weldTorso = Instance.new("WeldConstraint")
-	weldTorso.Part0 = root
-	weldTorso.Part1 = torso
-	weldTorso.Parent = root
-
-	-- Head (Glowing Core)
-	local head = Instance.new("Part")
-	head.Name = "Head"
-	head.Size = Vector3.new(1.4, 1.4, 1.4)
-	head.Position = torso.Position + Vector3.new(0, 2, 0)
-	head.Color = def.HeadColor
-	head.Material = Enum.Material.Neon
-	head.CanCollide = true
-	head.Parent = char
-
-	local weldHead = Instance.new("WeldConstraint")
-	weldHead.Part0 = torso
-	weldHead.Part1 = head
-	weldHead.Parent = torso
-
-	-- Spore Emitter VFX
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Rate = 12
-	emitter.Speed = NumberRange.new(2, 5)
-	emitter.Lifetime = NumberRange.new(1, 2)
-	emitter.Color = ColorSequence.new(head.Color)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.8),
-		NumberSequenceKeypoint.new(1, 0.1),
-	})
-	emitter.Transparency = NumberSequence.new(0.3)
-	emitter.Parent = head
-
-	-- Humanoid
-	local humanoid = Instance.new("Humanoid")
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		char:Destroy()
+		return nil
+	end
 	humanoid.MaxHealth = def.MaxHealth
 	humanoid.Health = def.MaxHealth
 	humanoid.WalkSpeed = def.WalkSpeed
-	humanoid.Parent = char
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 
-	-- Tag for CollectionService
+	if not char.PrimaryPart then
+		char.PrimaryPart = char:FindFirstChild("HumanoidRootPart")
+	end
+
+	char:PivotTo(CFrame.new(spawnPos + Vector3.new(0, 3, 0)))
 	CollectionService:AddTag(char, Tags.Mycomorph)
-
 	char.Parent = Workspace
 
-	-- Billboard health bar
-	local bgui = Instance.new("BillboardGui")
-	bgui.Size = UDim2.new(4, 0, 1, 0)
-	bgui.AlwaysOnTop = true
-	bgui.StudsOffset = Vector3.new(0, 3, 0)
-
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(1, 0, 0.2, 0)
-	frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	frame.BorderSizePixel = 0
-	frame.Parent = bgui
-
-	local bar = Instance.new("Frame")
-	bar.Size = UDim2.new(1, 0, 1, 0)
-	bar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-	bar.BorderSizePixel = 0
-	bar.Parent = frame
-
-	local despawnDelay = GameConfig.Enemies.DespawnDelay
-	humanoid.HealthChanged:Connect(function(health)
-		bar.Size = UDim2.new(health / humanoid.MaxHealth, 0, 1, 0)
-		if health <= 0 then
-			task.wait(despawnDelay)
-			char:Destroy()
-		end
-	end)
-
-	bgui.Parent = head
+	addHealthBar(char, humanoid)
 
 	return char
 end
