@@ -19,6 +19,13 @@ function BiomassRegistry.remove(part: BasePart)
 	end
 end
 
+-- Removes the canister from the tracked set WITHOUT destroying it, for when the caller wants
+-- to keep the part alive a moment longer (e.g. play a pickup animation on it) while still
+-- taking it out of the Purifier-absorption / beam-drawing loops immediately.
+function BiomassRegistry.untrack(part: BasePart)
+	active[part] = nil
+end
+
 function BiomassRegistry.getAll(): { [BasePart]: boolean }
 	return active
 end

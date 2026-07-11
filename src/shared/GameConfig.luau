@@ -93,6 +93,12 @@ GameConfig.Machete = {
 	ClientRange = 9, -- client target-selection range
 	ClientCooldown = 0.6,
 	ClientConeDot = -0.5, -- ~120 degree forward cone for target selection
+	-- Default Roblox slash animation (from the official "Sword Fighting" sample kit).
+	-- The kit's only other built-in swing ("Lunge") raises a leg mid-attack, which reads
+	-- oddly for a quick melee swing, so instead we alternate the same Slash clip between
+	-- a normal-speed and a faster playback for swing variety.
+	SwingAnimationId = "rbxassetid://522635514",
+	SwingAnimationSpeeds = { 1, 1.35 },
 }
 
 GameConfig.Pistol = {

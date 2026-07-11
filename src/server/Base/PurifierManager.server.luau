@@ -66,6 +66,33 @@ local purifierAttachment = Instance.new("Attachment")
 purifierAttachment.Name = "PurifierAttachment"
 purifierAttachment.Parent = purifier
 
+-- Constant ambient energy particles so the Purifier reads as "alive" at all times, not
+-- just when actively recharging. Emitted from the CENTER of the anchor and pushed outward
+-- in every direction (full sphere, not a narrow upward cone) so it reads as an energy field
+-- expanding from the core rather than motes rising from one spot.
+-- No custom Texture: the engine's built-in default particle renders reliably everywhere.
+local ambientAttachment = Instance.new("Attachment")
+ambientAttachment.Name = "PurifierAmbientAttachment"
+ambientAttachment.Parent = purifier
+
+local ambientEmitter = Instance.new("ParticleEmitter")
+ambientEmitter.Name = "PurifierAmbient"
+ambientEmitter.Color = ColorSequence.new(Color3.fromRGB(0, 255, 200))
+ambientEmitter.Size = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.9),
+	NumberSequenceKeypoint.new(1, 0.1),
+})
+ambientEmitter.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.1),
+	NumberSequenceKeypoint.new(1, 1),
+})
+ambientEmitter.Lifetime = NumberRange.new(1.5, 2.5)
+ambientEmitter.Speed = NumberRange.new(4, 9)
+ambientEmitter.SpreadAngle = Vector2.new(180, 180) -- full sphere outward, not just up
+ambientEmitter.Rate = 20
+ambientEmitter.Enabled = true
+ambientEmitter.Parent = ambientAttachment
+
 -- Air dome visual (clone the clean MeshPart template, or a fallback ball)
 local domeTemplate = ReplicatedStorage:FindFirstChild("SporeDomeMesh")
 local domeVisual

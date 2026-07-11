@@ -51,6 +51,19 @@ for i = 1, MAX_SLOTS do
 	stroke.Enabled = false
 	stroke.Parent = slot
 
+	-- Live 3D render of the equipped Tool's Handle, filling most of the slot
+	local viewport = Instance.new("ViewportFrame")
+	viewport.Name = "Icon"
+	viewport.Size = UDim2.new(1, 0, 1, -18) -- leave room for the name strip at the bottom
+	viewport.Position = UDim2.new(0, 0, 0, 0)
+	viewport.BackgroundTransparency = 1
+	viewport.Parent = slot
+
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 30
+	camera.Parent = viewport
+	viewport.CurrentCamera = camera
+
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.Size = UDim2.new(1, 0, 0, 16)
 	keyLabel.Position = UDim2.new(0, 0, 0, 2)
@@ -59,20 +72,35 @@ for i = 1, MAX_SLOTS do
 	keyLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 	keyLabel.TextSize = 12
 	keyLabel.Font = Enum.Font.SourceSansBold
+	keyLabel.ZIndex = 2
 	keyLabel.Parent = slot
 
 	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -6, 1, -20)
-	nameLabel.Position = UDim2.new(0, 3, 0, 18)
-	nameLabel.BackgroundTransparency = 1
+	nameLabel.Size = UDim2.new(1, 0, 0, 18)
+	nameLabel.Position = UDim2.new(0, 0, 1, -18)
+	nameLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	nameLabel.BackgroundTransparency = 0.4
+	nameLabel.BorderSizePixel = 0
 	nameLabel.Text = ""
 	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.TextSize = 13
+	nameLabel.TextSize = 12
 	nameLabel.Font = Enum.Font.SourceSansBold
 	nameLabel.TextWrapped = true
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.ZIndex = 2
 	nameLabel.Parent = slot
 
-	local entry = {Frame = slot, KeyLabel = keyLabel, NameLabel = nameLabel, Stroke = stroke, Tool = nil}
+	local entry = {
+		Frame = slot,
+		KeyLabel = keyLabel,
+		NameLabel = nameLabel,
+		Stroke = stroke,
+		Viewport = viewport,
+		Camera = camera,
+		IconTool = nil, -- the Tool currently rendered in Viewport, if any
+		IconModel = nil, -- the cloned Handle currently parented into Viewport
+		Tool = nil,
+	}
 	slots[i] = entry
 
 	slot.InputBegan:Connect(function(input, processed)
@@ -114,6 +142,60 @@ end
 
 local FRAME_WIDTH = MAX_SLOTS * SLOT_SIZE + (MAX_SLOTS - 1) * SLOT_GAP
 
+-- Instances that could try to run, play, or emit if left inside the isolated Viewport clone.
+local STRIP_CLASSES = {
+	"Script", "LocalScript", "ModuleScript", "Sound", "ProximityPrompt",
+	"ParticleEmitter", "PointLight", "SurfaceLight", "SpotLight", "BillboardGui", "Beam",
+}
+
+local function clearSlotIcon(entry)
+	if entry.IconModel then
+		entry.IconModel:Destroy()
+		entry.IconModel = nil
+	end
+end
+
+-- Clones the Tool's Handle into the slot's ViewportFrame and frames a camera around it, so
+-- the hotbar shows a live 3D render of the actual item instead of a generic placeholder.
+local function setSlotIcon(entry, tool)
+	clearSlotIcon(entry)
+	if not tool then
+		return
+	end
+
+	local handle = tool:FindFirstChild("Handle")
+	if not handle or not handle:IsA("BasePart") then
+		return
+	end
+
+	local model = handle:Clone()
+	model.Anchored = true
+	model.CanCollide = false
+	model.CanTouch = false
+	model.CanQuery = false
+	model.Massless = true
+	model.Transparency = 0
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		for _, className in ipairs(STRIP_CLASSES) do
+			if descendant:IsA(className) then
+				descendant:Destroy()
+				break
+			end
+		end
+	end
+
+	-- Frame the camera around the model's extents, viewed from a fixed 3/4 angle.
+	local radius = model.Size.Magnitude / 2
+	local distance = radius * 2.2 + 1
+	local offset = Vector3.new(distance * 0.7, distance * 0.55, distance * 0.7)
+	model.CFrame = CFrame.new(0, 0, 0)
+	entry.Camera.CFrame = CFrame.new(offset, Vector3.new(0, 0, 0))
+
+	model.Parent = entry.Viewport
+	entry.IconModel = model
+end
+
 local function updateSlotsUI()
 	local char = player.Character
 	local n = #slotOrder
@@ -130,10 +212,18 @@ local function updateSlotsUI()
 			entry.KeyLabel.Text = tostring(i)
 			entry.NameLabel.Text = formatToolLabel(tool)
 			entry.Stroke.Enabled = (char ~= nil and tool.Parent == char)
+			if entry.IconTool ~= tool then
+				entry.IconTool = tool
+				setSlotIcon(entry, tool)
+			end
 		else
 			entry.Frame.Visible = false
 			entry.NameLabel.Text = ""
 			entry.Stroke.Enabled = false
+			if entry.IconTool then
+				entry.IconTool = nil
+				clearSlotIcon(entry)
+			end
 		end
 	end
 end

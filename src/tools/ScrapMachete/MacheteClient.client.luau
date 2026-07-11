@@ -29,8 +29,50 @@ local RANGE = MACHETE.ClientRange
 local CONE_DOT = MACHETE.ClientConeDot
 local COOLDOWN = MACHETE.ClientCooldown
 local HOLSTER_NAME = "MacheteHolster"
+local SWING_ANIM_ID = MACHETE.SwingAnimationId
+local SWING_ANIM_SPEEDS = MACHETE.SwingAnimationSpeeds
 
 local lastAttack = 0
+
+-- Swing animation: one AnimationTrack loaded fresh onto the current character's Animator
+-- each Equip, replayed at alternating speeds per swing (see GameConfig) for variety.
+local swingTracks: { AnimationTrack } = {}
+local swingIndex = 0
+
+local function loadSwingAnimations(character: Model?)
+	swingTracks = {}
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+	local anim = Instance.new("Animation")
+	anim.AnimationId = SWING_ANIM_ID
+	for _ in ipairs(SWING_ANIM_SPEEDS) do
+		local ok, track = pcall(function()
+			return animator:LoadAnimation(anim)
+		end)
+		if ok and track then
+			track.Priority = Enum.AnimationPriority.Action
+			table.insert(swingTracks, track)
+		end
+	end
+end
+
+local function playSwingAnimation()
+	if #swingTracks == 0 then
+		return
+	end
+	swingIndex = (swingIndex % #swingTracks) + 1
+	local track = swingTracks[swingIndex]
+	track:Play(0.05, 1, SWING_ANIM_SPEEDS[swingIndex])
+end
+
+local function stopSwingAnimations()
+	for _, track in ipairs(swingTracks) do
+		track:Stop()
+	end
+end
 
 -- Picks the closest Mycomorph or ScrapPile roughly in front of the player.
 local function findClosestTarget()
@@ -79,8 +121,20 @@ local function findClosestTarget()
 end
 
 -- Sound Management
+local Debris = game:GetService("Debris")
 local handle = Tool:WaitForChild("Handle")
 local sounds = handle:WaitForChild("Sounds")
+
+-- Clones `sound` instead of reusing the shared template instance, so back-to-back hits
+-- (or two picks of the same sound in a row) never cut each other off by restarting the
+-- same Sound object mid-playback. Caller may tweak the clone (e.g. PlaybackSpeed) before
+-- calling :Play() on it; the clone self-destructs once it's done.
+local function cloneSound(sound: Sound): Sound
+	local clone = sound:Clone()
+	clone.Parent = sound.Parent
+	Debris:AddItem(clone, 5)
+	return clone
+end
 
 local function playRandomSwing()
 	if not sounds then return end
@@ -92,7 +146,7 @@ local function playRandomSwing()
 	end
 	if #swingSounds > 0 then
 		local s = swingSounds[math.random(1, #swingSounds)]
-		s:Play()
+		cloneSound(s):Play()
 	end
 end
 
@@ -101,9 +155,10 @@ local function playRandomHit(isScrapHit: boolean)
 	if isScrapHit then
 		local scrapHit = sounds:FindFirstChild("ScrapHit")
 		if scrapHit then
+			local clone = cloneSound(scrapHit)
 			-- Random pitch variation between 0.85 and 1.15
-			scrapHit.PlaybackSpeed = math.random(85, 115) / 100
-			scrapHit:Play()
+			clone.PlaybackSpeed = math.random(85, 115) / 100
+			clone:Play()
 		end
 	else
 		-- Flesh hits for enemies (Hit1, Hit2)
@@ -116,7 +171,7 @@ local function playRandomHit(isScrapHit: boolean)
 		end
 		if #hitSounds > 0 then
 			local s = hitSounds[math.random(1, #hitSounds)]
-			s:Play()
+			cloneSound(s):Play()
 		end
 	end
 end
@@ -128,8 +183,9 @@ Tool.Activated:Connect(function()
 	end
 	lastAttack = now
 
-	-- Play swing sound
+	-- Play swing sound + animation
 	playRandomSwing()
+	playSwingAnimation()
 
 	local target = findClosestTarget()
 	if target then
@@ -143,6 +199,7 @@ end)
 Tool.Equipped:Connect(function()
 	applyGrip()
 	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
+	loadSwingAnimations(player.Character)
 
 	-- Play equip sound
 	local equipSound = sounds and sounds:FindFirstChild("Equip")
@@ -153,6 +210,7 @@ end)
 
 Tool.Unequipped:Connect(function()
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
+	stopSwingAnimations()
 
 	-- Play unequip sound
 	local unequipSound = sounds and sounds:FindFirstChild("Unequip")

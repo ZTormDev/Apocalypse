@@ -11,6 +11,11 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Net = require(Shared:WaitForChild("Net"))
 local Tags = require(Shared:WaitForChild("Tags"))
 
+local ServerScriptService = game:GetService("ServerScriptService")
+local Modules = ServerScriptService:WaitForChild("modules")
+local ScrapVfx = require(Modules:WaitForChild("ScrapVfx"))
+local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
+
 local MACHETE = GameConfig.Machete
 local PISTOL = GameConfig.Pistol
 
@@ -75,6 +80,15 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 
 			if newHealth <= 0 then
 				local dropPos = targetRoot.Position
+
+				-- The pile's PrimaryPart is a thin flat root at ground level, but the visible
+				-- junk chunks stack several studs above and around it -- spawning the burst
+				-- from just above the root buries it inside that geometry. Use the model's
+				-- full bounding box so the burst starts clear above the whole pile instead.
+				local boundingCFrame, boundingSize = target:GetBoundingBox()
+				local burstPos = boundingCFrame.Position - Vector3.new(0, boundingSize.Y / 2, 0)
+				ScrapVfx.destroyBurst(burstPos)
+
 				target:Destroy()
 
 				-- Spawn physical scrap items on the ground
@@ -102,9 +116,11 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 							prompt.Parent = union
 
 							prompt.Triggered:Connect(function(collectingPlayer)
-								dropModel:Destroy()
-								local ScrapWallet = require(game.ServerScriptService.modules.ScrapWallet)
-								ScrapWallet.Add(collectingPlayer, 1) -- Each plaque yields exactly 1 scrap
+								PickupVfx.absorb(union, prompt, collectingPlayer, function()
+									dropModel:Destroy()
+									local ScrapWallet = require(game.ServerScriptService.modules.ScrapWallet)
+									ScrapWallet.Add(collectingPlayer, 1) -- Each plaque yields exactly 1 scrap
+								end)
 							end)
 
 							-- Scatter slightly on spawn
@@ -132,6 +148,8 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 					ScrapWallet.Add(player, SC.PerPile)
 				end
 				print(player.Name .. " mined and destroyed a ScrapPile.")
+			else
+				ScrapVfx.hit(targetRoot)
 			end
 		end
 	end

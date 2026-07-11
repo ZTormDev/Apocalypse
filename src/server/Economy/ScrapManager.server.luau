@@ -11,6 +11,8 @@ local Net = require(Shared:WaitForChild("Net"))
 local ServerScriptService = game:GetService("ServerScriptService")
 local Modules = ServerScriptService:WaitForChild("modules")
 local ScrapWallet = require(Modules:WaitForChild("ScrapWallet"))
+local ScrapVfx = require(Modules:WaitForChild("ScrapVfx"))
+local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
 
 local SC = GameConfig.Scrap
 
@@ -71,6 +73,7 @@ local function spawnScrapPile(pos: Vector3?): Model?
 	primaryPart.Anchored = true
 	primaryPart.CanCollide = true
 	primaryPart.Massless = true
+	ScrapVfx.attachHitSparks(primaryPart)
 
 	-- Weld all subparts to the primaryPart (and anchor all of them)
 	for _, p in ipairs(parts) do
@@ -215,9 +218,10 @@ dropScrapEvent.OnServerEvent:Connect(function(player)
 			prompt.Parent = union
 
 			prompt.Triggered:Connect(function(collectingPlayer)
-				dropModel:Destroy()
-				local Wallet = require(game.ServerScriptService.modules.ScrapWallet)
-				Wallet.Add(collectingPlayer, 1)
+				PickupVfx.absorb(union, prompt, collectingPlayer, function()
+					dropModel:Destroy()
+					ScrapWallet.Add(collectingPlayer, 1)
+				end)
 			end)
 
 			dropModel:PivotTo(CFrame.new(spawnPos))

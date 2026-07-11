@@ -13,6 +13,7 @@ local Net = require(Shared:WaitForChild("Net"))
 local ServerScriptService = game:GetService("ServerScriptService")
 local Modules = ServerScriptService:WaitForChild("modules")
 local BiomassRegistry = require(Modules:WaitForChild("BiomassRegistry"))
+local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
 
 local BM = GameConfig.Biomass
 local RECHARGE_RANGE = GameConfig.Purifier.RechargeRange
@@ -61,19 +62,33 @@ local function spawnBiomass(pos: Vector3?): BasePart
 	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.ActionText = "Store in Inventory"
 	prompt.ObjectText = "Spore Biomass"
-	prompt.HoldDuration = 0.2
+	prompt.HoldDuration = 0 -- instant press, no hold
 	prompt.MaxActivationDistance = 8
 	prompt.ClickablePrompt = false
 	prompt.Parent = canister
 
 	prompt.Triggered:Connect(function(player)
 		local toolTemplate = ReplicatedStorage:FindFirstChild("Spore Biomass")
-		if toolTemplate then
+		if not toolTemplate then
+			return
+		end
+
+		-- Stop tracking it immediately so the Purifier absorption loop and the beam-drawing
+		-- loop don't keep acting on a canister that's already mid-pickup -- but untrack (NOT
+		-- remove), because remove() destroys the part, which would orphan it out of Workspace
+		-- and the pickup animation would then play on an invisible, unreplicated object.
+		BiomassRegistry.untrack(canister)
+		local existingBeam = canister:FindFirstChild("SporeLinkBeam")
+		if existingBeam then
+			existingBeam:Destroy()
+		end
+
+		PickupVfx.absorb(canister, prompt, player, function()
+			canister:Destroy()
 			local clone = toolTemplate:Clone()
 			clone.Parent = player:WaitForChild("Backpack")
-			BiomassRegistry.remove(canister)
 			print(player.Name .. " stored biomass in their inventory.")
-		end
+		end)
 	end)
 
 	canister.Parent = Workspace
@@ -96,7 +111,7 @@ task.spawn(function()
 	end
 end)
 
--- Drop (F): throw one canister forward out of the held Spore Biomass tool
+-- Drop (G): throw one canister forward out of the held Spore Biomass tool
 dropBiomassEvent.OnServerEvent:Connect(function(player)
 	local char = player.Character
 	if not char or not char:FindFirstChild("HumanoidRootPart") then
@@ -110,7 +125,7 @@ dropBiomassEvent.OnServerEvent:Connect(function(player)
 		local spawnPos = root.Position + root.CFrame.LookVector * 4
 		local spawned = spawnBiomass(spawnPos)
 		spawned.AssemblyLinearVelocity = root.CFrame.LookVector * BM.ThrowVelocity + Vector3.new(0, 10, 0)
-		print(player.Name .. " dropped and threw biomass with F.")
+		print(player.Name .. " dropped and threw biomass with G.")
 	end
 end)
 
