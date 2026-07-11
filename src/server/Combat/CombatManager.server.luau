@@ -67,6 +67,9 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 
 	lastAttackTime[player] = now
 
+	-- Replicate machete hit to all clients for sound and visual playback
+	macheteAttackEvent:FireAllClients(player, target, isScrap)
+
 	if isMycomorph then
 		local humanoid = target:FindFirstChild("Humanoid")
 		if humanoid and humanoid.Health > 0 then

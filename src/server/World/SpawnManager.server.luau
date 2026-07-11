@@ -1,12 +1,9 @@
 -- ServerScriptService.World.SpawnManager
--- Central, Points-based loot spawning. Replaces the old hardcoded spawn loops in ScrapManager
--- and BiomassSpawner. Designers place tagged marker Parts in the Workspace:
---   * ItemSpawnPoint -> spawns weighted loot (ammo, machete, bandage, drink, food, biomass)
---   * ScrapSpawnPoint -> spawns a mineable Scrap Junk pile
--- Each point keeps at most MaxPerPoint live items and, each tick, rolls SpawnChance to try
--- topping up. All tunables live in GameConfig.Spawning / GameConfig.LootTable.
+-- Central, Points-based daily spawning cycle. Resets every dawn (DayNumber change)
+-- based on random percentages between 50% and 100% of the total workspace spawn points.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -17,34 +14,21 @@ local Modules = ServerScriptService:WaitForChild("modules")
 local ItemPickupFactory = require(Modules:WaitForChild("ItemPickupFactory"))
 local BiomassFactory = require(Modules:WaitForChild("BiomassFactory"))
 local ScrapPileFactory = require(Modules:WaitForChild("ScrapPileFactory"))
+local BiomassRegistry = require(Modules:WaitForChild("BiomassRegistry"))
 
 local SPAWN = GameConfig.Spawning
 local LOOT = GameConfig.LootTable
 
--- point (Instance) -> array of spawned instances still tied to it
-local tracked: { [Instance]: { Instance } } = {}
+-- Track instances spawned today to clean them up next morning
+local activeSpawns: { Instance } = {}
 
+-- Jitter position
 local function jitteredPos(point: BasePart): Vector3
 	local j = SPAWN.PositionJitter
 	return point.Position + Vector3.new(math.random(-j, j), 0, math.random(-j, j))
 end
 
--- Removes destroyed entries and returns how many are still alive.
-local function liveCount(point: Instance): number
-	local list = tracked[point]
-	if not list then
-		list = {}
-		tracked[point] = list
-	end
-	for i = #list, 1, -1 do
-		local inst = list[i]
-		if not inst or not inst.Parent then
-			table.remove(list, i)
-		end
-	end
-	return #list
-end
-
+-- Loot picker
 local totalLootWeight = 0
 for _, entry in ipairs(LOOT) do
 	totalLootWeight += entry.weight
@@ -62,35 +46,103 @@ local function pickLoot()
 	return LOOT[#LOOT]
 end
 
-local function spawnAtItemPoint(point: BasePart): Instance?
-	local entry = pickLoot()
-	local pos = jitteredPos(point)
-	if entry.kind == "biomass" then
-		return BiomassFactory.spawn(pos)
-	else
-		return ItemPickupFactory.spawn(entry.name, pos)
-	end
-end
-
-local function spawnAtScrapPoint(point: BasePart): Instance?
-	return ScrapPileFactory.spawn(jitteredPos(point))
-end
-
-local function tickPoints(tag: string, cfg, spawnFn)
-	for _, point in ipairs(CollectionService:GetTagged(tag)) do
-		if point:IsA("BasePart") then
-			if liveCount(point) < cfg.MaxPerPoint and math.random() < cfg.SpawnChance then
-				local spawned = spawnFn(point)
-				if spawned then
-					table.insert(tracked[point], spawned)
-				end
+-- Clear all remaining spawned items/piles on the map
+local function clearRemainingSpawns()
+	-- 1. Destroy tracked spawns
+	for _, inst in ipairs(activeSpawns) do
+		if inst and inst.Parent then
+			if inst.Name == "BiomassCatalyst" then
+				BiomassRegistry.untrack(inst)
 			end
+			inst:Destroy()
+		end
+	end
+	activeSpawns = {}
+
+	-- 2. Scan Workspace for leftovers (just in case)
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if child.Name == "ScrapPile" or child.Name == "BiomassCatalyst" or string.match(child.Name, "Pickup$") or child.Name == "ScrapItemDropped" then
+			if child.Name == "BiomassCatalyst" then
+				BiomassRegistry.untrack(child)
+			end
+			child:Destroy()
 		end
 	end
 end
 
--- Points are left visible (neon markers) in Studio so designers can see/move them; hide them
--- at runtime so players never see the markers.
+-- Shuffle array in place
+local function shuffleArray(t)
+	for i = #t, 2, -1 do
+		local j = math.random(i)
+		t[i], t[j] = t[j], t[i]
+	end
+end
+
+-- Main Spawning Cycle
+local function runDailySpawnCycle()
+	clearRemainingSpawns()
+
+	-- A) ITEMS
+	local itemPoints = CollectionService:GetTagged(Tags.ItemSpawnPoint)
+	local validItemPoints = {}
+	for _, p in ipairs(itemPoints) do
+		if p:IsA("BasePart") then
+			table.insert(validItemPoints, p)
+		end
+	end
+
+	-- Percentage of points to spawn: between 50% and 100%
+	local itemPct = math.random(50, 100) / 100
+	local numItemSpawns = math.round(#validItemPoints * itemPct)
+
+	shuffleArray(validItemPoints)
+
+	for i = 1, math.min(numItemSpawns, #validItemPoints) do
+		local point = validItemPoints[i]
+		local entry = pickLoot()
+		local pos = jitteredPos(point)
+		local spawnedObj = nil
+
+		if entry.kind == "biomass" then
+			spawnedObj = BiomassFactory.spawn(pos)
+		else
+			spawnedObj = ItemPickupFactory.spawn(entry.name, pos)
+		end
+
+		if spawnedObj then
+			table.insert(activeSpawns, spawnedObj)
+		end
+	end
+
+	print(string.format("[SpawnManager] Spawned items on %d/%d points (%.0f%%)", numItemSpawns, #validItemPoints, itemPct * 100))
+
+	-- B) SCRAP JUNKS
+	local scrapPoints = CollectionService:GetTagged(Tags.ScrapSpawnPoint)
+	local validScrapPoints = {}
+	for _, p in ipairs(scrapPoints) do
+		if p:IsA("BasePart") then
+			table.insert(validScrapPoints, p)
+		end
+	end
+
+	-- Percentage of points to spawn: between 50% and 100%
+	local scrapPct = math.random(50, 100) / 100
+	local numScrapSpawns = math.round(#validScrapPoints * scrapPct)
+
+	shuffleArray(validScrapPoints)
+
+	for i = 1, math.min(numScrapSpawns, #validScrapPoints) do
+		local point = validScrapPoints[i]
+		local spawnedObj = ScrapPileFactory.spawn(jitteredPos(point))
+		if spawnedObj then
+			table.insert(activeSpawns, spawnedObj)
+		end
+	end
+
+	print(string.format("[SpawnManager] Spawned scrap piles on %d/%d points (%.0f%%)", numScrapSpawns, #validScrapPoints, scrapPct * 100))
+end
+
+-- Hide marker parts
 local function hidePoints(tag: string)
 	for _, point in ipairs(CollectionService:GetTagged(tag)) do
 		if point:IsA("BasePart") then
@@ -101,14 +153,20 @@ local function hidePoints(tag: string)
 	end
 end
 
+-- Initial execution & DayNumber listener setup
 task.spawn(function()
-	-- small delay so tagged points placed in the Workspace are all present
-	task.wait(2)
+	task.wait(2) -- Wait for Workspace loading
 	hidePoints(Tags.ItemSpawnPoint)
 	hidePoints(Tags.ScrapSpawnPoint)
-	while true do
-		tickPoints(Tags.ItemSpawnPoint, SPAWN.ItemPoint, spawnAtItemPoint)
-		tickPoints(Tags.ScrapSpawnPoint, SPAWN.ScrapPoint, spawnAtScrapPoint)
-		task.wait(SPAWN.TickInterval)
-	end
+
+	-- SporeTideState configuration folder
+	local stateFolder = ReplicatedStorage:WaitForChild("SporeTideState")
+
+	-- Initial spawn cycle for Day 1
+	runDailySpawnCycle()
+
+	-- Connect to DayNumber attribute to run the cycle every time a new day begins
+	stateFolder:GetAttributeChangedSignal("DayNumber"):Connect(function()
+		runDailySpawnCycle()
+	end)
 end)

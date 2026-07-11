@@ -11,7 +11,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
 local PLAYER_MOVEMENT = GameConfig.Player
 
-local FOOTSTEP_SOUND_ID = "rbxasset://sounds/action_footsteps_plastic.mp3"
+local FOOTSTEP_SOUND_ID = "rbxassetid://139218459028027"
 
 local WALK_INTERVAL = 0.35
 local WALK_PITCH = 0.9
@@ -49,7 +49,8 @@ local function onCharacterAdded(char: Model)
 
 	local stepTimer = 0
 	stepConn = RunService.Heartbeat:Connect(function(dt)
-		if humanoid.Health <= 0 or humanoid.MoveDirection.Magnitude == 0 then
+		-- Do not play footstep sounds if dead, not moving, or in the air (FloorMaterial is Air)
+		if humanoid.Health <= 0 or humanoid.MoveDirection.Magnitude == 0 or humanoid.FloorMaterial == Enum.Material.Air then
 			stepTimer = 0
 			return
 		end

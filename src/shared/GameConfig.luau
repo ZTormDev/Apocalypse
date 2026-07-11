@@ -14,12 +14,17 @@ local GameConfig = {}
 -- Day / night clock and Purifier simulation
 -- ---------------------------------------------------------------------------------------
 GameConfig.World = {
-	-- Time
-	TimeStep = 0.1, -- hours advanced per real second (~240s per in-game day)
-	DayStartHour = 6.0,
-	NightStartHour = 18.0,
+	-- Phase-based day/night cycle: each phase lasts a fixed number of REAL seconds. Day and
+	-- Night are steady; Dusk/Dawn are the short lighting transitions between them.
+	--   Day -> Dusk -> Night -> Dawn -> Day ...
+	DayDuration = 300, -- 5 min of daytime
+	DuskDuration = 30, -- 30s transition day -> night
+	NightDuration = 180, -- 3 min of night (enemies spawn)
+	DawnDuration = 30, -- 30s transition night -> day
 
-	-- Lighting tint per phase
+	DayStartHour = 6.0, -- ClockTime the day begins at (also used by Bio-Recall's reset)
+
+	-- Lighting tint per phase (lerped across Dusk/Dawn)
 	NightAmbient = Color3.fromRGB(15, 15, 30),
 	NightOutdoorAmbient = Color3.fromRGB(10, 10, 25),
 	DayAmbient = Color3.fromRGB(120, 120, 120),
@@ -88,7 +93,7 @@ GameConfig.Survival = {
 	SprintHungerMultiplier = 2.5, -- hunger drains this much faster while sprinting
 
 	StarveDamagePerTick = 3, -- health lost per tick once hunger hits 0
-	HealthRegenPerTick = 1.5, -- health regained per tick while well-fed
+	HealthRegenPerTick = 0, -- health regained per tick while well-fed (disabled)
 	HungerRegenThreshold = 50, -- hunger must be above this for health to regen
 }
 
@@ -96,8 +101,8 @@ GameConfig.Survival = {
 -- Bandage restores Health; Drink/Food restore Hunger.
 GameConfig.Consumables = {
 	["Bandage"] = { HoldTime = 5, Heal = 25 },
-	["Drink"] = { HoldTime = 3, Hunger = 20 },
-	["Food"] = { HoldTime = 3, Hunger = 40 },
+	["Drink"] = { HoldTime = 2, Hunger = 20 },
+	["Food"] = { HoldTime = 2, Hunger = 40 },
 }
 
 -- One "Pistol Ammo" box grants this much to the player's PistolAmmo attribute.

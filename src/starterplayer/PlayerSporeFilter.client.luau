@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local AudioManager = require(Shared:WaitForChild("AudioManager"))
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -223,14 +224,14 @@ local currentScreenTint = "safe"
 local function updateScreenTint(isOutside)
 	if isOutside and currentScreenTint ~= "toxic" then
 		currentScreenTint = "toxic"
-		TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
-			TintColor = Color3.fromRGB(150, 220, 150),
-			Saturation = -0.4,
-			Contrast = 0.1
+		TweenService:Create(colorCorrection, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TintColor = Color3.fromRGB(190, 230, 190), -- Softer green tint (reduced intensity)
+			Saturation = -0.25,                        -- Less extreme desaturation
+			Contrast = 0.05                            -- Softer contrast bump
 		}):Play()
 	elseif not isOutside and currentScreenTint ~= "safe" then
 		currentScreenTint = "safe"
-		TweenService:Create(colorCorrection, TweenInfo.new(0.5), {
+		TweenService:Create(colorCorrection, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			TintColor = Color3.fromRGB(255, 255, 255),
 			Saturation = 0,
 			Contrast = 0
@@ -324,4 +325,39 @@ RunService.RenderStepped:Connect(function()
 	local hungerPct = math.clamp(hunger / survivalMax.MaxHunger, 0, 1)
 	hungerFill.Size = UDim2.new(hungerPct, 0, 1, 0)
 	hungerLabel.Text = string.format("Hunger: %d%%", math.round(hungerPct * 100))
+end)
+
+-- Periodic Gas Mask Breath/Exhalation Particle Emission
+task.spawn(function()
+	while true do
+		task.wait(3.2) -- Exhale breath particles every 3.2 seconds
+		if character and character.Parent then
+			local mask = character:FindFirstChild("GasMask")
+			if mask then
+				local handle = mask:FindFirstChild("Handle")
+				local emitter = handle and handle:FindFirstChild("BreathParticles", true) -- Recursive search
+				if emitter then
+					-- Emit a larger, more visible puff of 5 to 6 particles
+					emitter:Emit(math.random(5, 6))
+					print("GasMask exhaled breath particles.")
+				end
+			end
+		end
+	end
+end)
+
+-- Play pickup sound locally with zero latency on ProximityPrompt activation
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local lastPickupSoundTime = 0
+ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
+	if playerWhoTriggered == player then
+		local action = prompt.ActionText
+		if action == "Pick Up" or action == "Store in Inventory" or action == "Recoger Placa" or action == "Recoger" then
+			local now = os.clock()
+			if now - lastPickupSoundTime >= 0.05 then
+				lastPickupSoundTime = now
+				AudioManager.play("ItemPickup", nil) -- Plays in 2D stereo (no Head attenuation glitch)
+			end
+		end
+	end
 end)

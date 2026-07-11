@@ -82,9 +82,10 @@ local function findClosestTarget()
 		return nil
 	end
 
-	local closest, closestDist = nil, RANGE
+	local closest, closestDist = nil, MACHETE.ClientRange
 
 	-- 1. Search tagged Mycomorph enemies
+	local CollectionService = game:GetService("CollectionService")
 	for _, model in ipairs(CollectionService:GetTagged(Tags.Mycomorph)) do
 		local mRoot = model.PrimaryPart
 		local humanoid = model:FindFirstChild("Humanoid")
@@ -92,7 +93,7 @@ local function findClosestTarget()
 			local toTarget = mRoot.Position - root.Position
 			local dist = toTarget.Magnitude
 			if dist <= closestDist and dist > 0 then
-				if root.CFrame.LookVector:Dot(toTarget.Unit) > CONE_DOT then
+				if root.CFrame.LookVector:Dot(toTarget.Unit) > MACHETE.ClientConeDot then
 					closest = model
 					closestDist = dist
 				end
@@ -108,7 +109,7 @@ local function findClosestTarget()
 				local toTarget = mRoot.Position - root.Position
 				local dist = toTarget.Magnitude
 				if dist <= closestDist and dist > 0 then
-					if root.CFrame.LookVector:Dot(toTarget.Unit) > CONE_DOT then
+					if root.CFrame.LookVector:Dot(toTarget.Unit) > MACHETE.ClientConeDot then
 						closest = model
 						closestDist = dist
 					end
@@ -120,62 +121,6 @@ local function findClosestTarget()
 	return closest
 end
 
--- Sound Management
-local Debris = game:GetService("Debris")
-local handle = Tool:WaitForChild("Handle")
-local sounds = handle:WaitForChild("Sounds")
-
--- Clones `sound` instead of reusing the shared template instance, so back-to-back hits
--- (or two picks of the same sound in a row) never cut each other off by restarting the
--- same Sound object mid-playback. Caller may tweak the clone (e.g. PlaybackSpeed) before
--- calling :Play() on it; the clone self-destructs once it's done.
-local function cloneSound(sound: Sound): Sound
-	local clone = sound:Clone()
-	clone.Parent = sound.Parent
-	Debris:AddItem(clone, 5)
-	return clone
-end
-
-local function playRandomSwing()
-	if not sounds then return end
-	local swingSounds = {}
-	for _, child in ipairs(sounds:GetChildren()) do
-		if string.find(child.Name, "Swing") then
-			table.insert(swingSounds, child)
-		end
-	end
-	if #swingSounds > 0 then
-		local s = swingSounds[math.random(1, #swingSounds)]
-		cloneSound(s):Play()
-	end
-end
-
-local function playRandomHit(isScrapHit: boolean)
-	if not sounds then return end
-	if isScrapHit then
-		local scrapHit = sounds:FindFirstChild("ScrapHit")
-		if scrapHit then
-			local clone = cloneSound(scrapHit)
-			-- Random pitch variation between 0.85 and 1.15
-			clone.PlaybackSpeed = math.random(85, 115) / 100
-			clone:Play()
-		end
-	else
-		-- Flesh hits for enemies (Hit1, Hit2)
-		local hitSounds = {}
-		for _, child in ipairs(sounds:GetChildren()) do
-			-- Exclude ScrapHit from flesh hits list
-			if string.find(child.Name, "Hit") and child.Name ~= "ScrapHit" then
-				table.insert(hitSounds, child)
-			end
-		end
-		if #hitSounds > 0 then
-			local s = hitSounds[math.random(1, #hitSounds)]
-			cloneSound(s):Play()
-		end
-	end
-end
-
 Tool.Activated:Connect(function()
 	local now = os.clock()
 	if now - lastAttack < COOLDOWN then
@@ -183,43 +128,62 @@ Tool.Activated:Connect(function()
 	end
 	lastAttack = now
 
-	-- Play swing sound + animation
-	playRandomSwing()
+	local handle = Tool:FindFirstChild("Handle")
+
+	-- Play swing sound + animation instantly (latency-free)
+	if handle then
+		AudioManager.play("MacheteSwing" .. math.random(1, 3), handle)
+	end
 	playSwingAnimation()
 
 	local target = findClosestTarget()
 	if target then
+		-- Send hit command to server
 		macheteAttackEvent:FireServer(target)
+		
+		-- Play impact sound on a temporary anchor at hit position to prevent cutting off if target is destroyed
 		local isScrap = (target.Name == "ScrapPile")
-		playRandomHit(isScrap)
+		local hitSoundName = isScrap and "MacheteHitScrap" or ("MacheteHitFlesh" .. math.random(1, 2))
+		
+		local targetPart = target.PrimaryPart or (target:IsA("BasePart") and target)
+		if targetPart then
+			local soundAnchor = Instance.new("Attachment")
+			soundAnchor.Name = "MacheteHitAudioAnchor"
+			soundAnchor.WorldPosition = targetPart.Position
+			soundAnchor.Parent = workspace.Terrain
+			
+			AudioManager.play(hitSoundName, soundAnchor)
+			game:GetService("Debris"):AddItem(soundAnchor, 2.0) -- safe clean up
+		end
 	end
 end)
 
--- Show the blade on the player's back whenever the tool isn't equipped
+-- Holster connections
 Tool.Equipped:Connect(function()
 	applyGrip()
 	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
 	loadSwingAnimations(player.Character)
 
 	-- Play equip sound
-	local equipSound = sounds and sounds:FindFirstChild("Equip")
-	if equipSound then
-		equipSound:Play()
+	local handle = Tool:FindFirstChild("Handle")
+	if handle then
+		AudioManager.play("MacheteEquip", handle)
 	end
 end)
 
 Tool.Unequipped:Connect(function()
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 	stopSwingAnimations()
+	comboStep = 1 -- reset combo on holster
 
-	-- Play unequip sound
-	local unequipSound = sounds and sounds:FindFirstChild("Unequip")
-	if unequipSound then
-		unequipSound:Play()
+	-- Play unequip sound on head
+	local char = player.Character
+	local head = char and char:FindFirstChild("Head")
+	if head then
+		AudioManager.play("MacheteUnequip", head)
 	end
 end)
 
--- Show the holster immediately once the tool lands in the backpack (starts unequipped).
 if player.Character then
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 end

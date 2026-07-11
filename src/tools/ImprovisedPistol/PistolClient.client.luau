@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Net = require(Shared:WaitForChild("Net"))
+local AudioManager = require(Shared:WaitForChild("AudioManager"))
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -31,7 +32,6 @@ local handle = Tool:FindFirstChild("Handle")
 local shot = handle and handle:FindFirstChild("Shot")
 local dispenser = handle and handle:FindFirstChild("Dispenser")
 local shell = handle and handle:FindFirstChild("Shell")
-local sounds = handle and handle:FindFirstChild("Sounds")
 
 local function playMuzzleFlash()
 	if shot then
@@ -76,19 +76,22 @@ local function playMuzzleFlash()
 	end
 end
 
--- Apply grip CFrame every time the tool is equipped (sounds block is optional)
+-- Apply grip CFrame every time the tool is equipped
 Tool.Equipped:Connect(function()
 	applyGrip()
+	local h = Tool:FindFirstChild("Handle")
+	if h then
+		AudioManager.play("PistolEquip", h)
+	end
 end)
 
-if sounds then
-	Tool.Equipped:Connect(function()
-		sounds.Equip:Play()
-	end)
-	Tool.Unequipped:Connect(function()
-		sounds.Unequipped:Play()
-	end)
-end
+Tool.Unequipped:Connect(function()
+	local char = player.Character
+	local head = char and char:FindFirstChild("Head")
+	if head then
+		AudioManager.play("PistolUnequip", head)
+	end
+end)
 
 Tool.Activated:Connect(function()
 	local now = os.clock()
@@ -103,11 +106,13 @@ Tool.Activated:Connect(function()
 		return
 	end
 
+	local h = Tool:FindFirstChild("Handle")
+
 	-- Check if player has ammo before firing effects
 	local ammo = player:GetAttribute("PistolAmmo") or 0
 	if ammo <= 0 then
-		if sounds and sounds:FindFirstChild("Empty") then
-			sounds.Empty:Play()
+		if h then
+			AudioManager.play("PistolEmpty", h)
 		end
 		return
 	end
@@ -120,9 +125,13 @@ Tool.Activated:Connect(function()
 		direction = root.CFrame.LookVector
 	end
 
+	-- Send fire command to server
 	pistolFireEvent:FireServer(direction)
-	if sounds then
-		sounds.Activated:Play()
+
+	-- Play fire sound immediately on the client (latency-free)
+	if h then
+		AudioManager.play("PistolFire", h)
 	end
+
 	task.spawn(playMuzzleFlash)
 end)
