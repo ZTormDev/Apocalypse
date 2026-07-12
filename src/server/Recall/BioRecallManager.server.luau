@@ -26,6 +26,11 @@ local completeEvent = Net.event("BioRecallEvents", "BioRecallComplete")
 
 local purifier = Workspace:WaitForChild("Purifier", 15)
 
+-- No individual respawns: a player who dies stays exactly where they fell (ragdolled) instead of
+-- teleporting back after a few seconds. The only way anyone gets back up is the whole team dying
+-- at once, which triggers the Bio-Recall Protocol below and respawns everyone together.
+Players.CharacterAutoLoads = false
+
 local snapshot: any = nil
 local isRecalling = false
 local hasEverSpawned: { [Player]: boolean } = {} -- a player still loading in doesn't count as a "wipe"
@@ -34,9 +39,17 @@ local function onCharacterAdded(player: Player)
 	hasEverSpawned[player] = true
 end
 
+local function spawnInitialCharacter(player: Player)
+	if not player.Character then
+		player:LoadCharacter()
+	end
+end
+
 for _, player in ipairs(Players:GetPlayers()) do
 	if player.Character then
 		hasEverSpawned[player] = true
+	else
+		spawnInitialCharacter(player)
 	end
 	player.CharacterAdded:Connect(function()
 		onCharacterAdded(player)
@@ -46,6 +59,7 @@ Players.PlayerAdded:Connect(function(player)
 	player.CharacterAdded:Connect(function()
 		onCharacterAdded(player)
 	end)
+	spawnInitialCharacter(player)
 end)
 Players.PlayerRemoving:Connect(function(player)
 	hasEverSpawned[player] = nil

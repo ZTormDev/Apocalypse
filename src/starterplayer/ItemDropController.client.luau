@@ -1,6 +1,6 @@
 -- StarterPlayerScripts.ItemDropController
 -- G drops whatever tool is currently equipped, as a physical object other players can pick
--- back up with E. Scrap and Spore Biomass already have their own G behavior wired to their
+-- back up with E. Scrap and Biomass Fuel already have their own G behavior wired to their
 -- own tools (throwing a plaque from your wallet / respawning the full canister with its
 -- light + Purifier beam) so this defers to their existing events instead of double-dropping.
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local dropBiomassEvent = Net.event("SporeEvents", "DropBiomass")
 
 -- Tools with their own dedicated G-drop behavior, and which event to fire instead.
 local SPECIAL_DROP_EVENTS: { [string]: RemoteEvent } = {
-	["Spore Biomass"] = dropBiomassEvent,
+	["Biomass Fuel"] = dropBiomassEvent,
 }
 local HANDLES_OWN_DROP = { ["Scrap"] = true } -- see ScrapDropScript.client.luau
 

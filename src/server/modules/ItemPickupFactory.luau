@@ -14,10 +14,17 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Modules = script.Parent
 local PickupVfx = require(Modules:WaitForChild("PickupVfx"))
 local InventoryService = require(Modules:WaitForChild("InventoryService"))
+local StackableTool = require(Modules:WaitForChild("StackableTool"))
 
 local ItemPickupFactory = {}
 
 local AMMO_TOOL = "Pistol Ammo"
+
+-- Tools that merge into a single stacking Tool instance (Amount attribute) instead of adding a
+-- new Tool per pickup -- see StackableTool.
+local STACKABLE_TOOLS = {
+	["Bandage"] = true,
+}
 
 function ItemPickupFactory.spawn(toolName: string, pos: Vector3): BasePart?
 	local template = ReplicatedStorage:FindFirstChild(toolName)
@@ -61,6 +68,8 @@ function ItemPickupFactory.spawn(toolName: string, pos: Vector3): BasePart?
 			if toolName == AMMO_TOOL then
 				local current = player:GetAttribute("PistolAmmo") or 0
 				player:SetAttribute("PistolAmmo", current + GameConfig.Ammo.PerBox)
+			elseif STACKABLE_TOOLS[toolName] then
+				StackableTool.add(player, toolName, 1)
 			else
 				local backpack = player:FindFirstChild("Backpack")
 				if backpack then

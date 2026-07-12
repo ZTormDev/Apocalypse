@@ -42,8 +42,10 @@ local menuTitle = Instance.new("TextLabel")
 menuTitle.Size = UDim2.new(1, 0, 0, 30)
 menuTitle.Text = "ASSEMBLY CONSOLE"
 menuTitle.TextColor3 = Color3.fromRGB(0, 255, 255)
+menuTitle.TextStrokeColor3 = Color3.new(0, 0, 0)
+menuTitle.TextStrokeTransparency = 0
 menuTitle.TextSize = 16
-menuTitle.Font = Enum.Font.SourceSansBold
+menuTitle.Font = Enum.Font.GothamBold
 menuTitle.BackgroundTransparency = 1
 menuTitle.Parent = menuFrame
 
@@ -52,8 +54,10 @@ subtitle.Size = UDim2.new(1, 0, 0, 16)
 subtitle.Position = UDim2.new(0, 0, 0, 28)
 subtitle.Text = "Craft blueprints, then equip & place them"
 subtitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+subtitle.TextStrokeColor3 = Color3.new(0, 0, 0)
+subtitle.TextStrokeTransparency = 0
 subtitle.TextSize = 11
-subtitle.Font = Enum.Font.SourceSans
+subtitle.Font = Enum.Font.GothamBold
 subtitle.BackgroundTransparency = 1
 subtitle.Parent = menuFrame
 
@@ -73,8 +77,10 @@ local function createCraftButton(structureType, position)
 	button.BackgroundColor3 = Color3.fromRGB(50, 55, 60)
 	button.Text = string.format("Craft %s (%d Scrap)", structureType, cost)
 	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextStrokeColor3 = Color3.new(0, 0, 0)
+	button.TextStrokeTransparency = 0
 	button.TextSize = 14
-	button.Font = Enum.Font.SourceSansBold
+	button.Font = Enum.Font.GothamBold
 	button.Parent = menuFrame
 
 	local buttonCorner = Instance.new("UICorner")
@@ -95,8 +101,10 @@ closeButton.Position = UDim2.new(0.05, 0, 0, 138)
 closeButton.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
 closeButton.Text = "Close"
 closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.TextStrokeColor3 = Color3.new(0, 0, 0)
+closeButton.TextStrokeTransparency = 0
 closeButton.TextSize = 14
-closeButton.Font = Enum.Font.SourceSansBold
+closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = menuFrame
 
 local closeButtonCorner = Instance.new("UICorner")

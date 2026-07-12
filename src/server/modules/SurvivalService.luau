@@ -1,14 +1,19 @@
 --!strict
 -- ServerScriptService.modules.SurvivalService
--- Server-authoritative Health + Hunger. Health is the character's Humanoid.Health (MaxHealth
--- set from config); Hunger is a Player attribute "Hunger" (0-100) the HUD reads. Hunger drains
--- over time (faster while sprinting), starving damages health, and being well-fed slowly
--- regenerates health. ConsumableManager calls heal()/feed() to apply bandage/food/drink effects.
+-- Server-authoritative Health + Hunger + Thirst. Health is the character's Humanoid.Health
+-- (MaxHealth set from config); Hunger/Thirst are Player attributes (0-100) the HUD reads. Both
+-- drain over time (faster while sprinting), and hitting 0 on either damages health. Being
+-- well-fed slowly regenerates health. ConsumableManager calls heal()/feed()/quench() to apply
+-- bandage/food/drink effects.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+
+local ServerScriptService = game:GetService("ServerScriptService")
+local Modules = ServerScriptService:WaitForChild("modules")
+local Ragdoll = require(Modules:WaitForChild("Ragdoll"))
 
 local SV = GameConfig.Survival
 local SPRINT_SPEED = GameConfig.Player.SprintSpeed
@@ -20,17 +25,28 @@ local function setupCharacter(character: Model)
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	humanoid.MaxHealth = SV.MaxHealth
 	humanoid.Health = SV.MaxHealth
-	-- Reset hunger on every (re)spawn -- otherwise a player who died starving respawns with
-	-- Hunger still at 0 and immediately starves again, an endless death loop (which also made
-	-- Bio-Recall fire on repeat and wipe every zombie the moment it spawned).
+	-- Hide Roblox's built-in floating health bar; the custom HUD (PlayerSporeFilter) is the only
+	-- health display.
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	-- Ragdoll on death instead of Roblox's default BreakJointsOnDeath (which disassembles the rig
+	-- into disconnected floating parts) -- the character should flop over and stay in one piece.
+	humanoid.BreakJointsOnDeath = false
+	humanoid.Died:Connect(function()
+		Ragdoll.apply(character)
+	end)
+	-- Reset hunger/thirst on every (re)spawn -- otherwise a player who died starving/dehydrated
+	-- respawns with it still at 0 and immediately starts dying again, an endless death loop
+	-- (which also made Bio-Recall fire on repeat and wipe every zombie the moment it spawned).
 	local player = Players:GetPlayerFromCharacter(character)
 	if player then
 		player:SetAttribute("Hunger", SV.MaxHunger)
+		player:SetAttribute("Thirst", SV.MaxThirst)
 	end
 end
 
 local function setupPlayer(player: Player)
 	player:SetAttribute("Hunger", SV.MaxHunger)
+	player:SetAttribute("Thirst", SV.MaxThirst)
 	if player.Character then
 		setupCharacter(player.Character)
 	end
@@ -48,20 +64,34 @@ local function tickPlayer(player: Player)
 		return
 	end
 
-	local hunger = player:GetAttribute("Hunger") or SV.MaxHunger
+	local sprinting = isSprinting(character, humanoid)
 
 	-- Drain hunger (faster while sprinting)
-	local drain = SV.HungerDrainPerTick
-	if isSprinting(character, humanoid) then
-		drain *= SV.SprintHungerMultiplier
+	local hunger = player:GetAttribute("Hunger") or SV.MaxHunger
+	local hungerDrain = SV.HungerDrainPerTick
+	if sprinting then
+		hungerDrain *= SV.SprintHungerMultiplier
 	end
-	hunger = math.max(0, hunger - drain)
+	hunger = math.max(0, hunger - hungerDrain)
 	player:SetAttribute("Hunger", hunger)
 
-	-- Starving damages health; being well-fed slowly regenerates it
+	-- Drain thirst (faster while sprinting)
+	local thirst = player:GetAttribute("Thirst") or SV.MaxThirst
+	local thirstDrain = SV.ThirstDrainPerTick
+	if sprinting then
+		thirstDrain *= SV.SprintThirstMultiplier
+	end
+	thirst = math.max(0, thirst - thirstDrain)
+	player:SetAttribute("Thirst", thirst)
+
+	-- Starving/dehydration damages health; being well-fed slowly regenerates it
 	if hunger <= 0 then
 		humanoid:TakeDamage(SV.StarveDamagePerTick)
-	elseif hunger >= SV.HungerRegenThreshold and humanoid.Health < humanoid.MaxHealth then
+	end
+	if thirst <= 0 then
+		humanoid:TakeDamage(SV.DehydrateDamagePerTick)
+	end
+	if hunger >= SV.HungerRegenThreshold and thirst > 0 and humanoid.Health < humanoid.MaxHealth then
 		humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + SV.HealthRegenPerTick)
 	end
 end
@@ -79,6 +109,12 @@ end
 function SurvivalService.feed(player: Player, amount: number)
 	local hunger = player:GetAttribute("Hunger") or 0
 	player:SetAttribute("Hunger", math.min(SV.MaxHunger, hunger + amount))
+end
+
+-- Restores player Thirst by `amount`, clamped to MaxThirst.
+function SurvivalService.quench(player: Player, amount: number)
+	local thirst = player:GetAttribute("Thirst") or 0
+	player:SetAttribute("Thirst", math.min(SV.MaxThirst, thirst + amount))
 end
 
 -- Idempotent boot: wires player/character setup and the survival tick loop.

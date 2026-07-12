@@ -67,11 +67,12 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 
 	lastAttackTime[player] = now
 
-	-- Replicate machete hit to all clients for sound and visual playback
+	-- Replicate machete hit to all clients for visual playback
 	macheteAttackEvent:FireAllClients(player, target, isScrap)
 
 	if isMycomorph then
-		local humanoid = target:FindFirstChild("Humanoid")
+		-- The Wildling rig's Humanoid is named "Zombie", not "Humanoid" -- must look up by class.
+		local humanoid = target:FindFirstChildOfClass("Humanoid")
 		if humanoid and humanoid.Health > 0 then
 			humanoid:TakeDamage(MACHETE.Damage)
 		end
@@ -215,7 +216,8 @@ pistolFireEvent.OnServerEvent:Connect(function(player, direction)
 		local hitPart = result.Instance
 		local model = hitPart:FindFirstAncestorOfClass("Model")
 		if model and CollectionService:HasTag(model, Tags.Mycomorph) then
-			local humanoid = model:FindFirstChild("Humanoid")
+			-- The Wildling rig's Humanoid is named "Zombie", not "Humanoid" -- look up by class.
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
 			if humanoid and humanoid.Health > 0 then
 				humanoid:TakeDamage(PISTOL.Damage)
 			end

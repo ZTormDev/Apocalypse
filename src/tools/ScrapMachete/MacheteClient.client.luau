@@ -1,5 +1,5 @@
 -- ReplicatedStorage.Scrap Machete.MacheteClient
--- Client target selection + swing/hit SFX + back holster. The server (CombatManager)
+-- Client target selection + back holster. The server (CombatManager)
 -- independently re-validates range/cooldown before applying damage; this only picks a target.
 local Tool = script.Parent
 local Players = game:GetService("Players")
@@ -88,7 +88,8 @@ local function findClosestTarget()
 	local CollectionService = game:GetService("CollectionService")
 	for _, model in ipairs(CollectionService:GetTagged(Tags.Mycomorph)) do
 		local mRoot = model.PrimaryPart
-		local humanoid = model:FindFirstChild("Humanoid")
+		-- The Wildling rig's Humanoid is named "Zombie", not "Humanoid" -- look up by class.
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
 		if mRoot and humanoid and humanoid.Health > 0 then
 			local toTarget = mRoot.Position - root.Position
 			local dist = toTarget.Magnitude
@@ -128,33 +129,12 @@ Tool.Activated:Connect(function()
 	end
 	lastAttack = now
 
-	local handle = Tool:FindFirstChild("Handle")
-
-	-- Play swing sound + animation instantly (latency-free)
-	if handle then
-		AudioManager.play("MacheteSwing" .. math.random(1, 3), handle)
-	end
 	playSwingAnimation()
 
 	local target = findClosestTarget()
 	if target then
 		-- Send hit command to server
 		macheteAttackEvent:FireServer(target)
-		
-		-- Play impact sound on a temporary anchor at hit position to prevent cutting off if target is destroyed
-		local isScrap = (target.Name == "ScrapPile")
-		local hitSoundName = isScrap and "MacheteHitScrap" or ("MacheteHitFlesh" .. math.random(1, 2))
-		
-		local targetPart = target.PrimaryPart or (target:IsA("BasePart") and target)
-		if targetPart then
-			local soundAnchor = Instance.new("Attachment")
-			soundAnchor.Name = "MacheteHitAudioAnchor"
-			soundAnchor.WorldPosition = targetPart.Position
-			soundAnchor.Parent = workspace.Terrain
-			
-			AudioManager.play(hitSoundName, soundAnchor)
-			game:GetService("Debris"):AddItem(soundAnchor, 2.0) -- safe clean up
-		end
 	end
 end)
 
@@ -163,25 +143,12 @@ Tool.Equipped:Connect(function()
 	applyGrip()
 	ToolEffects.removeHolster(player.Character, HOLSTER_NAME)
 	loadSwingAnimations(player.Character)
-
-	-- Play equip sound
-	local handle = Tool:FindFirstChild("Handle")
-	if handle then
-		AudioManager.play("MacheteEquip", handle)
-	end
 end)
 
 Tool.Unequipped:Connect(function()
 	ToolEffects.showHolster(Tool, player.Character, HOLSTER_NAME)
 	stopSwingAnimations()
 	comboStep = 1 -- reset combo on holster
-
-	-- Play unequip sound on head
-	local char = player.Character
-	local head = char and char:FindFirstChild("Head")
-	if head then
-		AudioManager.play("MacheteUnequip", head)
-	end
 end)
 
 if player.Character then

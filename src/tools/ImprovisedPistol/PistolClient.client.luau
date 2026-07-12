@@ -1,6 +1,6 @@
 -- ReplicatedStorage.Improvised Pistol.PistolClient
 -- Sends only the aim direction; the server (CombatManager) does its own raycast and is the
--- sole authority on ammo and damage. Everything here is cosmetic (muzzle flash + SFX).
+-- sole authority on ammo and damage. Everything here is cosmetic (muzzle flash).
 local Tool = script.Parent
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,7 +8,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Net = require(Shared:WaitForChild("Net"))
-local AudioManager = require(Shared:WaitForChild("AudioManager"))
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -26,7 +25,7 @@ local function applyGrip()
 		* CFrame.Angles(0, 0, math.rad(g.RotZ))
 end
 
--- Cosmetic muzzle flash / shell-eject / sound (from the mesh asset's own effect parts). Tied
+-- Cosmetic muzzle flash / shell-eject (from the mesh asset's own effect parts). Tied
 -- to that specific mesh's named children, so it stays here rather than in a generic helper.
 local handle = Tool:FindFirstChild("Handle")
 local shot = handle and handle:FindFirstChild("Shot")
@@ -77,21 +76,7 @@ local function playMuzzleFlash()
 end
 
 -- Apply grip CFrame every time the tool is equipped
-Tool.Equipped:Connect(function()
-	applyGrip()
-	local h = Tool:FindFirstChild("Handle")
-	if h then
-		AudioManager.play("PistolEquip", h)
-	end
-end)
-
-Tool.Unequipped:Connect(function()
-	local char = player.Character
-	local head = char and char:FindFirstChild("Head")
-	if head then
-		AudioManager.play("PistolUnequip", head)
-	end
-end)
+Tool.Equipped:Connect(applyGrip)
 
 Tool.Activated:Connect(function()
 	local now = os.clock()
@@ -106,14 +91,9 @@ Tool.Activated:Connect(function()
 		return
 	end
 
-	local h = Tool:FindFirstChild("Handle")
-
 	-- Check if player has ammo before firing effects
 	local ammo = player:GetAttribute("PistolAmmo") or 0
 	if ammo <= 0 then
-		if h then
-			AudioManager.play("PistolEmpty", h)
-		end
 		return
 	end
 
@@ -127,11 +107,6 @@ Tool.Activated:Connect(function()
 
 	-- Send fire command to server
 	pistolFireEvent:FireServer(direction)
-
-	-- Play fire sound immediately on the client (latency-free)
-	if h then
-		AudioManager.play("PistolFire", h)
-	end
 
 	task.spawn(playMuzzleFlash)
 end)

@@ -195,7 +195,8 @@ task.spawn(function()
 					for _, part in ipairs(parts) do
 						local model = part:FindFirstAncestorOfClass("Model")
 						if model and not zapped[model] and CollectionService:HasTag(model, Tags.Mycomorph) then
-							local humanoid = model:FindFirstChild("Humanoid")
+							-- The Wildling rig's Humanoid is named "Zombie", not "Humanoid".
+							local humanoid = model:FindFirstChildOfClass("Humanoid")
 							if humanoid and humanoid.Health > 0 then
 								zapped[model] = true
 								humanoid:TakeDamage(FENCE.Damage)

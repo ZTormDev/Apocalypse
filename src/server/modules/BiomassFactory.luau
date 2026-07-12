@@ -15,11 +15,11 @@ local InventoryService = require(Modules:WaitForChild("InventoryService"))
 local BiomassFactory = {}
 
 function BiomassFactory.spawn(pos: Vector3): BasePart
-	-- The world canister uses the SAME visual as the held Spore Biomass tool (clone its Handle),
+	-- The world canister uses the SAME visual as the held Biomass Fuel tool (clone its Handle),
 	-- so a dropped/spawned canister and the equipped tool look identical. Falls back to a plain
 	-- green cube if the tool/Handle is missing.
 	local canister: BasePart
-	local template = ReplicatedStorage:FindFirstChild("Spore Biomass")
+	local template = ReplicatedStorage:FindFirstChild("Biomass Fuel")
 	local handleTemplate = template and template:FindFirstChild("Handle")
 	if handleTemplate and handleTemplate:IsA("BasePart") then
 		canister = handleTemplate:Clone()
@@ -49,18 +49,18 @@ function BiomassFactory.spawn(pos: Vector3): BasePart
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.ActionText = "Store in Inventory"
-	prompt.ObjectText = "Spore Biomass"
+	prompt.ObjectText = "Biomass Fuel"
 	prompt.HoldDuration = 0 -- instant press, no hold
 	prompt.MaxActivationDistance = 8
 	prompt.ClickablePrompt = false
 	prompt.Parent = canister
 
 	prompt.Triggered:Connect(function(player)
-		local toolTemplate = ReplicatedStorage:FindFirstChild("Spore Biomass")
+		local toolTemplate = ReplicatedStorage:FindFirstChild("Biomass Fuel")
 		if not toolTemplate then
 			return
 		end
-		if not InventoryService.canAccept(player, "Spore Biomass") then
+		if not InventoryService.canAccept(player, "Biomass Fuel") then
 			return -- belt + backpack full: can't pick up
 		end
 

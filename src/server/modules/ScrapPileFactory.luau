@@ -9,6 +9,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local ModelBounds = require(Shared:WaitForChild("ModelBounds"))
 
 local Modules = script.Parent
 local ScrapVfx = require(Modules:WaitForChild("ScrapVfx"))
@@ -84,31 +85,24 @@ function ScrapPileFactory.spawn(targetPos: Vector3): Model?
 	model:SetAttribute("Health", SC.MaxHealth)
 	model:SetAttribute("MaxHealth", SC.MaxHealth)
 
-	-- Billboard health bar + name
+	-- Billboard health bar (no name label), centered above the pile's true AABB (not just the
+	-- PrimaryPart) so it's centered regardless of the asset's shape/proportions.
+	local topCenter = ModelBounds.getTopCenter(model, 0.4)
+
 	local bgui = Instance.new("BillboardGui")
 	bgui.Name = "HealthGui"
-	bgui.Size = UDim2.new(0, 90, 0, 26)
-	bgui.StudsOffset = Vector3.new(0, 4.5, 0)
+	bgui.Size = UDim2.new(0, 130, 0, 8)
+	bgui.StudsOffset = Vector3.zero
+	bgui.StudsOffsetWorldSpace = topCenter - primaryPart.Position
 	bgui.MaxDistance = 40
 	bgui.AlwaysOnTop = true
 	bgui.Adornee = primaryPart
 	bgui.Enabled = true
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "NameLabel"
-	nameLabel.Size = UDim2.new(1, 0, 0, 14)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = "Scrap Junk"
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.TextStrokeTransparency = 0.5
-	nameLabel.Font = Enum.Font.SourceSansBold
-	nameLabel.TextScaled = true
-	nameLabel.Parent = bgui
-
 	local bg = Instance.new("Frame")
 	bg.Name = "BarBackground"
-	bg.Position = UDim2.new(0, 0, 0, 18)
-	bg.Size = UDim2.new(1, 0, 0, 8)
+	bg.Position = UDim2.new(0, 0, 0, 0)
+	bg.Size = UDim2.new(1, 0, 1, 0)
 	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	bg.BorderSizePixel = 0
 	bg.Parent = bgui

@@ -17,18 +17,24 @@ GameConfig.World = {
 	-- Phase-based day/night cycle: each phase lasts a fixed number of REAL seconds. Day and
 	-- Night are steady; Dusk/Dawn are the short lighting transitions between them.
 	--   Day -> Dusk -> Night -> Dawn -> Day ...
-	DayDuration = 300, -- 5 min of daytime
+	DayDuration = 20, -- TESTING: 20s of daytime (normally 300 / 5 min -- revert before shipping)
 	DuskDuration = 30, -- 30s transition day -> night
-	NightDuration = 180, -- 3 min of night (enemies spawn)
+	-- Night has no fixed duration -- it lasts exactly as long as the zombie horde does (see
+	-- GameConfig.Enemies.Horde), ending the moment the last zombie dies. This is a safety cap
+	-- only, in case the horde system stalls for any reason, so the game can't soft-lock at night.
+	NightMaxDuration = 900,
 	DawnDuration = 30, -- 30s transition night -> day
 
 	DayStartHour = 6.0, -- ClockTime the day begins at (also used by Bio-Recall's reset)
 
-	-- Lighting tint per phase (lerped across Dusk/Dawn)
-	NightAmbient = Color3.fromRGB(15, 15, 30),
-	NightOutdoorAmbient = Color3.fromRGB(10, 10, 25),
-	DayAmbient = Color3.fromRGB(120, 120, 120),
-	DayOutdoorAmbient = Color3.fromRGB(120, 120, 120),
+	-- Lighting tint per phase (lerped across Dusk/Dawn). Slightly dust/rust-shifted off neutral
+	-- grey for a subdued apocalyptic mood -- kept close to the original brightness so it reads
+	-- as "dusty" rather than a heavy color grade. Night is kept bright enough to actually see
+	-- (and fight the horde) by, with a cool blue-purple tint instead of near-black.
+	NightAmbient = Color3.fromRGB(70, 65, 85),
+	NightOutdoorAmbient = Color3.fromRGB(55, 52, 72),
+	DayAmbient = Color3.fromRGB(118, 108, 96),
+	DayOutdoorAmbient = Color3.fromRGB(122, 112, 98),
 }
 
 GameConfig.Purifier = {
@@ -41,12 +47,22 @@ GameConfig.Purifier = {
 	MaxHealth = 100.0,
 	FuelDecayPerSecond = 0.3,
 
-	MaxDomeRadius = 60.0,
+	MaxDomeRadius = 60.0, -- level 1 dome radius cap; each level adds DomeRadiusPerLevel on top
 	MinDomeRadius = 12.0, -- emergency radius when fuel hits zero
 	DomeLerpAlpha = 0.1, -- per-second interpolation toward the target radius
 
-	RechargeRange = 20, -- studs within which a Biomass Catalyst is absorbed
+	RechargeRange = 20, -- studs within which a dropped Biomass Catalyst is absorbed
 	RechargePerCanister = 25,
+
+	-- Leveling: loading more fuel than the current capacity levels the Purifier up, carrying the
+	-- leftover fuel into the new (larger) capacity and expanding the dome.
+	MaxLevel = 5,
+	FuelCapacityPerLevel = 40.0, -- added to MaxFuel per level above 1
+	DomeRadiusPerLevel = 12.0, -- added to MaxDomeRadius per level above 1
+
+	-- Interaction-based fueling (LoadFuelPrompt on the Purifier itself)
+	LoadFuelHoldDuration = 0.5,
+	LoadFuelActivationDistance = 10,
 }
 
 -- Server-authoritative mask filter / toxic damage (client only reads these for UI)
@@ -81,28 +97,34 @@ GameConfig.Scrap = {
 }
 
 -- ---------------------------------------------------------------------------------------
--- Survival: player Health (Humanoid.Health) + Hunger (Player "Hunger" attribute, 0-100).
--- Both are server-authoritative; the client HUD only reads them.
+-- Survival: player Health (Humanoid.Health) + Hunger + Thirst (Player attributes, 0-100 each).
+-- All three are server-authoritative; the client HUD only reads them.
 -- ---------------------------------------------------------------------------------------
 GameConfig.Survival = {
 	MaxHealth = 100,
 	MaxHunger = 100,
+	MaxThirst = 100,
 	TickInterval = 1.0, -- seconds per survival tick
 
 	HungerDrainPerTick = 0.6, -- baseline hunger lost per tick while alive
 	SprintHungerMultiplier = 2.5, -- hunger drains this much faster while sprinting
 
+	ThirstDrainPerTick = 0.8, -- baseline thirst lost per tick while alive (drains a bit faster than hunger)
+	SprintThirstMultiplier = 2.5, -- thirst drains this much faster while sprinting
+
 	StarveDamagePerTick = 3, -- health lost per tick once hunger hits 0
+	DehydrateDamagePerTick = 3, -- health lost per tick once thirst hits 0
 	HealthRegenPerTick = 0, -- health regained per tick while well-fed (disabled)
 	HungerRegenThreshold = 50, -- hunger must be above this for health to regen
 }
 
 -- Consumable tools: hold left-click for HoldTime seconds, then apply the effect.
--- Bandage restores Health; Drink/Food restore Hunger.
+-- Bandage restores Health. Canned Beans mainly restores Hunger with a small Thirst bump;
+-- Water Bottle restores Thirst only, no Hunger.
 GameConfig.Consumables = {
 	["Bandage"] = { HoldTime = 5, Heal = 25 },
-	["Drink"] = { HoldTime = 2, Hunger = 20 },
-	["Food"] = { HoldTime = 2, Hunger = 40 },
+	["Water Bottle"] = { HoldTime = 2, Hunger = 0, Thirst = 60 },
+	["Canned Beans"] = { HoldTime = 2, Hunger = 40, Thirst = 10 },
 }
 
 -- One "Pistol Ammo" box grants this much to the player's PistolAmmo attribute.
@@ -142,9 +164,9 @@ GameConfig.LootTable = {
 	{ name = "Pistol Ammo", kind = "tool", weight = 3 },
 	{ name = "Scrap Machete", kind = "tool", weight = 1 },
 	{ name = "Bandage", kind = "tool", weight = 3 },
-	{ name = "Drink", kind = "tool", weight = 3 },
-	{ name = "Food", kind = "tool", weight = 3 },
-	{ name = "Biomass", kind = "biomass", weight = 2 },
+	{ name = "Water Bottle", kind = "tool", weight = 3 },
+	{ name = "Canned Beans", kind = "tool", weight = 3 },
+	{ name = "Biomass Fuel", kind = "biomass", weight = 2 },
 }
 
 -- ---------------------------------------------------------------------------------------
@@ -231,7 +253,7 @@ GameConfig.Enemies = {
 		["Basic"] = {
 			DisplayName = "Spore-walker",
 			MaxHealth = 100,
-			WalkSpeed = 13,
+			WalkSpeed = GameConfig.Player.WalkSpeed, -- matches the player's normal walk speed
 			TorsoColor = Color3.fromRGB(45, 80, 45),
 			HeadColor = Color3.fromRGB(0, 255, 100),
 			SpawnWeight = 7, -- out of 10
@@ -239,16 +261,22 @@ GameConfig.Enemies = {
 		["Fast"] = {
 			DisplayName = "Sprout Runner",
 			MaxHealth = 50,
-			WalkSpeed = 22,
+			WalkSpeed = (GameConfig.Player.WalkSpeed + GameConfig.Player.SprintSpeed) / 2, -- between the player's walk and sprint speed
 			TorsoColor = Color3.fromRGB(130, 0, 180),
 			HeadColor = Color3.fromRGB(255, 0, 255),
 			SpawnWeight = 3,
 		},
 	},
 
-	Spawn = {
-		Distance = 110, -- studs from the Purifier
-		Interval = 8, -- seconds between spawns during the night
+	-- The night horde: a fixed total number of zombies, trickled in one at a time (not all at
+	-- once) from four flat rectangular zones placed North/South/East/West of the Purifier.
+	-- Night ends once every zombie has been spawned AND killed.
+	Horde = {
+		TotalZombies = 20,
+		SpawnInterval = 4, -- seconds between each individual zombie spawn
+
+		ZoneSize = Vector3.new(40, 1, 16), -- flat rectangle footprint (X width, Y thickness, Z depth)
+		ZoneDistance = 100, -- studs from the Purifier to each zone's center
 	},
 
 	Ai = {
@@ -276,7 +304,7 @@ GameConfig.BioRecall = {
 	DiscardedOnRecall = {
 		["Wall"] = true,
 		["Electric Fence"] = true,
-		["Spore Biomass"] = true,
+		["Biomass Fuel"] = true,
 	},
 }
 

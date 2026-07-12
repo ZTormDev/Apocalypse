@@ -1,10 +1,14 @@
 -- ServerScriptService.World.WorldClock
--- Phase-based day/night cycle. Instead of a continuously ticking clock, time is divided into
--- four phases with fixed REAL-second durations (GameConfig.World):
---   Day (steady) -> Dusk (transition) -> Night (steady, enemies) -> Dawn (transition) -> Day...
+-- Phase-based day/night cycle:
+--   Day (5 min) -> Dusk (30s transition) -> Night (until the zombie horde is cleared) ->
+--   Dawn (30s transition) -> Day...
 -- Within each phase the sun (ClockTime) and ambient light are interpolated from the phase's
 -- start keyframe to its end keyframe, so Day/Night look stable and Dusk/Dawn smoothly cross-fade.
 -- IsNight is true only during the Night phase; DayNumber increments each time a new Day begins.
+-- Night doesn't have a fixed duration: MycomorphManager starts the horde the moment IsNight
+-- becomes true and sets the "HordeActive" attribute false the instant every zombie for the
+-- night is dead, which this script watches to cut Night short into Dawn. NightMaxDuration is
+-- only a safety net (forces Dawn regardless, in case the horde system ever stalls).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 
@@ -23,7 +27,7 @@ end
 local PHASES = {
 	{ name = "Day",   duration = W.DayDuration,   clockFrom = 6,  clockTo = 18, nightFrom = 0, nightTo = 0, isNight = false },
 	{ name = "Dusk",  duration = W.DuskDuration,  clockFrom = 18, clockTo = 20, nightFrom = 0, nightTo = 1, isNight = false },
-	{ name = "Night", duration = W.NightDuration, clockFrom = 20, clockTo = 28, nightFrom = 1, nightTo = 1, isNight = true },
+	{ name = "Night", duration = W.NightMaxDuration, clockFrom = 20, clockTo = 28, nightFrom = 1, nightTo = 1, isNight = true },
 	{ name = "Dawn",  duration = W.DawnDuration,  clockFrom = 28, clockTo = 30, nightFrom = 1, nightTo = 0, isNight = false },
 }
 
@@ -49,6 +53,7 @@ end
 
 local phaseIndex = 1
 local phaseElapsed = 0
+local NIGHT_INDEX = 3
 
 local function enterPhase(index: number)
 	phaseIndex = index
@@ -56,6 +61,23 @@ local function enterPhase(index: number)
 	stateFolder:SetAttribute("Phase", phase.name)
 	stateFolder:SetAttribute("IsNight", phase.isNight)
 end
+
+-- Cuts Night short into Dawn as soon as MycomorphManager reports the horde cleared. Requires
+-- having actually seen HordeActive go true first, so the brief false->true->false window at the
+-- very start of the night (before the first zombie spawns) can't be mistaken for an early clear.
+local nightHordeSeenActive = false
+local function onHordeActiveChanged()
+	if phaseIndex ~= NIGHT_INDEX then
+		return
+	end
+	if stateFolder:GetAttribute("HordeActive") then
+		nightHordeSeenActive = true
+	elseif nightHordeSeenActive then
+		nightHordeSeenActive = false
+		phaseElapsed = PHASES[NIGHT_INDEX].duration -- let the main loop's phase-advance handle it
+	end
+end
+stateFolder:GetAttributeChangedSignal("HordeActive"):Connect(onHordeActiveChanged)
 
 task.spawn(function()
 	local last = os.clock()
@@ -75,6 +97,7 @@ task.spawn(function()
 			-- Bio-Recall just finished (it resets the world to 6:00 AM of the same day) -- realign
 			-- the phase machine to the start of Day without bumping DayNumber.
 			wasFrozen = false
+			nightHordeSeenActive = false
 			enterPhase(1)
 			phaseElapsed = 0
 		end

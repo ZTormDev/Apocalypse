@@ -29,14 +29,14 @@ for _, child in ipairs(Workspace:GetChildren()) do
 	end
 end
 
--- Drop (G): throw one canister forward out of the held Spore Biomass tool
+-- Drop (G): throw one canister forward out of the held Biomass Fuel tool
 dropBiomassEvent.OnServerEvent:Connect(function(player)
 	local char = player.Character
 	if not char or not char:FindFirstChild("HumanoidRootPart") then
 		return
 	end
 
-	local tool = char:FindFirstChild("Spore Biomass")
+	local tool = char:FindFirstChild("Biomass Fuel")
 	if tool then
 		tool:Destroy()
 		local root = char.HumanoidRootPart

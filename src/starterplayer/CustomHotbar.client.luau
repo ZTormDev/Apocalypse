@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -25,73 +26,28 @@ local swapItemEvent = Net.event("InventoryEvents", "SwapItems")
 local BELT_SIZE = GameConfig.Inventory.BeltSize
 local BACKPACK_SIZE = GameConfig.Inventory.BackpackSize
 
--- Visual constants
-local SLOT_SIZE = 74
-local SLOT_GAP = 8
-local ACCENT = Color3.fromRGB(0, 235, 255)
-local IDLE_STROKE = Color3.fromRGB(70, 78, 92)
-local SLOT_BG = Color3.fromRGB(20, 23, 30)
-local PANEL_BG = Color3.fromRGB(14, 16, 22)
+-- ---------------------------------------------------------------------------------------
+-- Design tokens -- a single restrained, neutral-dark palette with one warm accent used only
+-- for the equipped/hover state, so the UI reads as calm and professional rather than "gamey".
+-- ---------------------------------------------------------------------------------------
+local SLOT_SIZE = 68
+local SLOT_GAP = 10
+local SLOT_CORNER = UDim.new(0, 8)
+local PANEL_CORNER = UDim.new(0, 12)
+
+local COL_PANEL_BG = Color3.fromRGB(16, 17, 20)
+local COL_SLOT_BG = Color3.fromRGB(26, 27, 32)
+local COL_SLOT_BG_HOVER = Color3.fromRGB(33, 35, 41)
+local COL_BORDER_IDLE = Color3.fromRGB(42, 44, 50)
+local COL_BORDER_HOVER = Color3.fromRGB(96, 100, 110)
+local COL_ACCENT = Color3.fromRGB(224, 158, 74) -- warm amber; equipped state + branding accents
+local COL_TEXT = Color3.fromRGB(222, 224, 229)
+local COL_TEXT_DIM = Color3.fromRGB(118, 122, 132)
+
 local DRAG_THRESHOLD = 6
 
-local STRIP_CLASSES = {
-	"Script", "LocalScript", "ModuleScript", "Sound", "ProximityPrompt",
-	"ParticleEmitter", "PointLight", "SurfaceLight", "SpotLight", "BillboardGui", "Beam",
-}
-
--- ---------------------------------------------------------------------------------------
--- Icon rendering (live 3D render of a tool's Handle in a ViewportFrame)
--- ---------------------------------------------------------------------------------------
-local function clearViewport(viewport)
-	for _, c in ipairs(viewport:GetChildren()) do
-		if c:IsA("BasePart") or c:IsA("Model") then
-			c:Destroy()
-		end
-	end
-end
-
-local function renderIcon(viewport, camera, tool)
-	clearViewport(viewport)
-	if not tool then
-		return
-	end
-	local handle = tool:FindFirstChild("Handle")
-	if not handle or not handle:IsA("BasePart") then
-		return
-	end
-	-- Clone the Handle (with any welded child parts) into a Model so the camera can frame the
-	-- whole assembly's bounding box -- multi-part items (e.g. the water bottle) would otherwise
-	-- be sized only by the Handle part and get cropped.
-	local holder = Instance.new("Model")
-	local model = handle:Clone()
-	model.CanCollide = false
-	model.CanTouch = false
-	model.CanQuery = false
-	model.Parent = holder
-	for _, descendant in ipairs(holder:GetDescendants()) do
-		for _, className in ipairs(STRIP_CLASSES) do
-			if descendant:IsA(className) then
-				descendant:Destroy()
-				break
-			end
-		end
-	end
-	for _, p in ipairs(holder:GetDescendants()) do
-		if p:IsA("BasePart") then
-			p.Anchored = true
-		end
-	end
-	local cf, size = holder:GetBoundingBox()
-	for _, p in ipairs(holder:GetDescendants()) do
-		if p:IsA("BasePart") then
-			p.CFrame = CFrame.new(-cf.Position) * p.CFrame
-		end
-	end
-	local radius = size.Magnitude / 2
-	local distance = radius * 2.2 + 1
-	camera.CFrame = CFrame.new(Vector3.new(distance * 0.7, distance * 0.55, distance * 0.7), Vector3.new(0, 0, 0))
-	holder.Parent = viewport
-end
+local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TWEEN_PANEL = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local function formatCount(tool)
 	local amount = tool:GetAttribute("Amount")
@@ -108,75 +64,86 @@ local function buildSlot(parent, area, index)
 	local slot = Instance.new("Frame")
 	slot.Name = area .. "Slot" .. index
 	slot.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
-	slot.BackgroundColor3 = SLOT_BG
-	slot.BackgroundTransparency = 0.15
+	slot.BackgroundColor3 = COL_SLOT_BG
 	slot.BorderSizePixel = 0
 	slot.Parent = parent
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
+	corner.CornerRadius = SLOT_CORNER
 	corner.Parent = slot
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = IDLE_STROKE
-	stroke.Thickness = 1.5
-	stroke.Transparency = 0.2
+	stroke.Color = COL_BORDER_IDLE
+	stroke.Thickness = 1
 	stroke.Parent = slot
 
-	local gradient = Instance.new("UIGradient")
-	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(180, 180, 190))
-	gradient.Transparency = NumberSequence.new(0.85, 0.95)
-	gradient.Parent = slot
-
-	local viewport = Instance.new("ViewportFrame")
-	viewport.Name = "Icon"
-	viewport.Size = UDim2.new(1, -8, 1, -8)
-	viewport.Position = UDim2.new(0, 4, 0, 4)
-	viewport.BackgroundTransparency = 1
-	viewport.Parent = slot
-	local camera = Instance.new("Camera")
-	camera.FieldOfView = 28
-	camera.Parent = viewport
-	viewport.CurrentCamera = camera
-
 	local keyLabel = Instance.new("TextLabel")
-	keyLabel.Size = UDim2.new(0, 16, 0, 16)
-	keyLabel.Position = UDim2.new(0, 4, 0, 2)
+	keyLabel.Name = "KeyLabel"
+	keyLabel.Size = UDim2.new(0, 18, 0, 14)
+	keyLabel.Position = UDim2.new(0, 5, 0, 4)
 	keyLabel.BackgroundTransparency = 1
 	keyLabel.Text = area == "belt" and tostring(index) or ""
-	keyLabel.TextColor3 = Color3.fromRGB(150, 156, 170)
-	keyLabel.TextSize = 12
+	keyLabel.TextColor3 = COL_TEXT_DIM
+	keyLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	keyLabel.TextStrokeTransparency = 0
+	keyLabel.TextSize = 11
 	keyLabel.Font = Enum.Font.GothamBold
 	keyLabel.TextXAlignment = Enum.TextXAlignment.Left
 	keyLabel.ZIndex = 3
 	keyLabel.Parent = slot
 
 	local countLabel = Instance.new("TextLabel")
-	countLabel.Size = UDim2.new(1, -6, 0, 16)
-	countLabel.Position = UDim2.new(0, 0, 0, 2)
+	countLabel.Name = "CountLabel"
+	countLabel.Size = UDim2.new(1, 0, 0, 14)
+	countLabel.Position = UDim2.new(0, 0, 1, -19)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = ""
-	countLabel.TextColor3 = ACCENT
-	countLabel.TextSize = 13
+	countLabel.TextColor3 = COL_ACCENT
+	countLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	countLabel.TextStrokeTransparency = 0
+	countLabel.TextSize = 12
 	countLabel.Font = Enum.Font.GothamBold
-	countLabel.TextXAlignment = Enum.TextXAlignment.Right
+	countLabel.TextXAlignment = Enum.TextXAlignment.Center
 	countLabel.ZIndex = 3
 	countLabel.Parent = slot
 
 	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -4, 0, 16)
-	nameLabel.Position = UDim2.new(0, 2, 1, -16)
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, -8, 1, -32)
+	nameLabel.Position = UDim2.new(0, 4, 0, 16)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = ""
-	nameLabel.TextColor3 = Color3.fromRGB(235, 238, 245)
-	nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-	nameLabel.TextStrokeTransparency = 0.35
-	nameLabel.TextSize = 11
-	nameLabel.Font = Enum.Font.GothamMedium
-	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.TextColor3 = COL_TEXT
+	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	nameLabel.TextStrokeTransparency = 0
+	nameLabel.TextSize = 12
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextWrapped = true
+	nameLabel.TextScaled = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
 	nameLabel.ZIndex = 3
 	nameLabel.Parent = slot
+
+	local nameLabelConstraint = Instance.new("UITextSizeConstraint")
+	nameLabelConstraint.MaxTextSize = 12
+	nameLabelConstraint.Parent = nameLabel
+
+	-- Thin accent underline, only visible while equipped -- a quieter selection indicator than a
+	-- thick glowing border.
+	local equippedBar = Instance.new("Frame")
+	equippedBar.Name = "EquippedBar"
+	equippedBar.AnchorPoint = Vector2.new(0.5, 1)
+	equippedBar.Position = UDim2.new(0.5, 0, 1, -3)
+	equippedBar.Size = UDim2.new(0, 0, 0, 2)
+	equippedBar.BackgroundColor3 = COL_ACCENT
+	equippedBar.BorderSizePixel = 0
+	equippedBar.Visible = false
+	equippedBar.ZIndex = 4
+	equippedBar.Parent = slot
+	local equippedBarCorner = Instance.new("UICorner")
+	equippedBarCorner.CornerRadius = UDim.new(1, 0)
+	equippedBarCorner.Parent = equippedBar
 
 	-- Transparent button covering the whole slot, above every child, so hover + input read from
 	-- one place (a Frame's MouseEnter/MouseLeave flicker as the cursor crosses child GUI objects).
@@ -190,20 +157,37 @@ local function buildSlot(parent, area, index)
 	hit.Parent = slot
 
 	local entry = {
-		Frame = slot, Viewport = viewport, Camera = camera, Hit = hit,
+		Frame = slot, Hit = hit,
 		KeyLabel = keyLabel, CountLabel = countLabel, NameLabel = nameLabel, Stroke = stroke,
-		Area = area, Index = index, Tool = nil, IconTool = nil, Hovered = false, Selected = false,
+		EquippedBar = equippedBar,
+		Area = area, Index = index, Tool = nil, Hovered = false, Selected = false,
 	}
+
+	local function applyVisualState()
+		if entry.Selected then
+			TweenService:Create(stroke, TWEEN_FAST, { Color = COL_ACCENT, Thickness = 1.5 }):Play()
+			TweenService:Create(slot, TWEEN_FAST, { BackgroundColor3 = COL_SLOT_BG_HOVER }):Play()
+			equippedBar.Visible = true
+			TweenService:Create(equippedBar, TWEEN_FAST, { Size = UDim2.new(0, 22, 0, 2) }):Play()
+		elseif entry.Hovered then
+			TweenService:Create(stroke, TWEEN_FAST, { Color = COL_BORDER_HOVER, Thickness = 1 }):Play()
+			TweenService:Create(slot, TWEEN_FAST, { BackgroundColor3 = COL_SLOT_BG_HOVER }):Play()
+			equippedBar.Visible = false
+		else
+			TweenService:Create(stroke, TWEEN_FAST, { Color = COL_BORDER_IDLE, Thickness = 1 }):Play()
+			TweenService:Create(slot, TWEEN_FAST, { BackgroundColor3 = COL_SLOT_BG }):Play()
+			equippedBar.Visible = false
+		end
+	end
+	entry.ApplyVisualState = applyVisualState
 
 	hit.MouseEnter:Connect(function()
 		entry.Hovered = true
-		stroke.Color = ACCENT
+		applyVisualState()
 	end)
 	hit.MouseLeave:Connect(function()
 		entry.Hovered = false
-		if not entry.Selected then
-			stroke.Color = IDLE_STROKE
-		end
+		applyVisualState()
 	end)
 
 	return entry
@@ -220,12 +204,51 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.Parent = playerGui
 
+local function addTopAccent(target, width)
+	local accent = Instance.new("Frame")
+	accent.Name = "TopAccent"
+	accent.AnchorPoint = Vector2.new(0.5, 0)
+	accent.Position = UDim2.new(0.5, 0, 0, 0)
+	accent.Size = width and UDim2.new(0, width, 0, 2) or UDim2.new(1, 0, 0, 2)
+	accent.BackgroundColor3 = COL_ACCENT
+	accent.BackgroundTransparency = 0.35
+	accent.BorderSizePixel = 0
+	accent.ZIndex = 2
+	accent.Parent = target
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(1, 0)
+	c.Parent = accent
+	return accent
+end
+
+local beltPanel = Instance.new("Frame")
+beltPanel.Name = "BeltPanel"
+beltPanel.AnchorPoint = Vector2.new(0.5, 1)
+beltPanel.Position = UDim2.new(0.5, 0, 1, -18)
+beltPanel.Size = UDim2.new(
+	0, BELT_SIZE * SLOT_SIZE + (BELT_SIZE - 1) * SLOT_GAP + SLOT_GAP * 2,
+	0, SLOT_SIZE + SLOT_GAP * 2
+)
+beltPanel.BackgroundColor3 = COL_PANEL_BG
+beltPanel.BackgroundTransparency = 0.08
+beltPanel.BorderSizePixel = 0
+beltPanel.ClipsDescendants = true
+beltPanel.Parent = gui
+local beltPanelCorner = Instance.new("UICorner")
+beltPanelCorner.CornerRadius = PANEL_CORNER
+beltPanelCorner.Parent = beltPanel
+local beltPanelStroke = Instance.new("UIStroke")
+beltPanelStroke.Color = COL_BORDER_IDLE
+beltPanelStroke.Thickness = 1
+beltPanelStroke.Parent = beltPanel
+addTopAccent(beltPanel, 48)
+
 local beltFrame = Instance.new("Frame")
-beltFrame.AnchorPoint = Vector2.new(0.5, 1)
-beltFrame.Position = UDim2.new(0.5, 0, 1, -18)
+beltFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+beltFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 beltFrame.Size = UDim2.new(0, BELT_SIZE * SLOT_SIZE + (BELT_SIZE - 1) * SLOT_GAP, 0, SLOT_SIZE)
 beltFrame.BackgroundTransparency = 1
-beltFrame.Parent = gui
+beltFrame.Parent = beltPanel
 local beltLayout = Instance.new("UIListLayout")
 beltLayout.FillDirection = Enum.FillDirection.Horizontal
 beltLayout.Padding = UDim.new(0, SLOT_GAP)
@@ -236,49 +259,69 @@ beltLayout.Parent = beltFrame
 
 local BP_COLS = 5
 local BP_ROWS = math.ceil(BACKPACK_SIZE / BP_COLS)
+local HEADER_HEIGHT = 32
 local panel = Instance.new("Frame")
 panel.Name = "BackpackPanel"
 panel.AnchorPoint = Vector2.new(0.5, 0.5)
 panel.Position = UDim2.new(0.5, 0, 0.42, 0)
 panel.Size = UDim2.new(
 	0, BP_COLS * SLOT_SIZE + (BP_COLS + 1) * SLOT_GAP,
-	0, BP_ROWS * SLOT_SIZE + (BP_ROWS + 1) * SLOT_GAP + 38
+	0, BP_ROWS * SLOT_SIZE + (BP_ROWS + 1) * SLOT_GAP + HEADER_HEIGHT
 )
-panel.BackgroundColor3 = PANEL_BG
-panel.BackgroundTransparency = 0.1
+panel.BackgroundColor3 = COL_PANEL_BG
+panel.BackgroundTransparency = 0.08
 panel.BorderSizePixel = 0
 panel.Visible = false
 panel.Parent = gui
 local panelCorner = Instance.new("UICorner")
-panelCorner.CornerRadius = UDim.new(0, 14)
+panelCorner.CornerRadius = PANEL_CORNER
 panelCorner.Parent = panel
 local panelStroke = Instance.new("UIStroke")
-panelStroke.Color = ACCENT
-panelStroke.Thickness = 1.5
-panelStroke.Transparency = 0.4
+panelStroke.Color = COL_BORDER_IDLE
+panelStroke.Thickness = 1
 panelStroke.Parent = panel
+local panelTopAccent = addTopAccent(panel)
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 34)
+title.Name = "Title"
+title.Size = UDim2.new(1, -24, 0, HEADER_HEIGHT)
+title.Position = UDim2.new(0, 14, 0, 2)
 title.BackgroundTransparency = 1
-title.Text = "MOCHILA"
-title.TextColor3 = ACCENT
-title.TextSize = 16
+title.Text = "BACKPACK"
+title.TextColor3 = COL_TEXT
+title.TextStrokeColor3 = Color3.new(0, 0, 0)
+title.TextStrokeTransparency = 0
+title.TextSize = 13
 title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = panel
+
 local hint = Instance.new("TextLabel")
-hint.Size = UDim2.new(1, -12, 0, 34)
+hint.Name = "Hint"
+hint.Size = UDim2.new(1, -14, 0, HEADER_HEIGHT)
+hint.Position = UDim2.new(0, 0, 0, 2)
 hint.BackgroundTransparency = 1
-hint.Text = "[B]"
-hint.TextColor3 = Color3.fromRGB(140, 146, 160)
+hint.Text = "B"
+hint.TextColor3 = COL_TEXT_DIM
+hint.TextStrokeColor3 = Color3.new(0, 0, 0)
+hint.TextStrokeTransparency = 0
 hint.TextSize = 12
-hint.Font = Enum.Font.GothamMedium
+hint.Font = Enum.Font.GothamBold
 hint.TextXAlignment = Enum.TextXAlignment.Right
 hint.Parent = panel
 
+local headerDivider = Instance.new("Frame")
+headerDivider.Name = "HeaderDivider"
+headerDivider.Position = UDim2.new(0, SLOT_GAP, 0, HEADER_HEIGHT)
+headerDivider.Size = UDim2.new(1, -SLOT_GAP * 2, 0, 1)
+headerDivider.BackgroundColor3 = COL_BORDER_IDLE
+headerDivider.BorderSizePixel = 0
+headerDivider.Parent = panel
+
 local grid = Instance.new("Frame")
-grid.Position = UDim2.new(0, SLOT_GAP, 0, 38)
-grid.Size = UDim2.new(1, -SLOT_GAP * 2, 1, -38 - SLOT_GAP)
+grid.Name = "Grid"
+grid.Position = UDim2.new(0, SLOT_GAP, 0, HEADER_HEIGHT + SLOT_GAP)
+grid.Size = UDim2.new(1, -SLOT_GAP * 2, 1, -HEADER_HEIGHT - SLOT_GAP * 2)
 grid.BackgroundTransparency = 1
 grid.Parent = panel
 local gridLayout = Instance.new("UIGridLayout")
@@ -298,6 +341,84 @@ for i = 1, BACKPACK_SIZE do
 	local e = buildSlot(grid, "backpack", i)
 	e.Frame.LayoutOrder = i
 	backpackSlots[i] = e
+end
+
+-- Smooth open/close for the backpack. CanvasGroup's GroupTransparency doesn't reliably cascade
+-- to every descendant (grid-managed slot text stayed opaque), so instead every fadable
+-- element's own transparency is tweened in lockstep -- all Tweens share the same TweenInfo and
+-- are started in the same frame, so they animate together.
+local fadeTargets = {} -- { {inst, prop, base}, ... } -- base = fully-open resting transparency
+local function trackFade(inst, prop, base)
+	table.insert(fadeTargets, { inst = inst, prop = prop, base = base })
+end
+
+trackFade(panel, "BackgroundTransparency", 0.08)
+trackFade(panelStroke, "Transparency", 0)
+trackFade(panelTopAccent, "BackgroundTransparency", 0.35)
+trackFade(title, "TextTransparency", 0)
+trackFade(title, "TextStrokeTransparency", 0)
+trackFade(hint, "TextTransparency", 0)
+trackFade(hint, "TextStrokeTransparency", 0)
+trackFade(headerDivider, "BackgroundTransparency", 0)
+for _, s in ipairs(backpackSlots) do
+	trackFade(s.Frame, "BackgroundTransparency", 0)
+	trackFade(s.Stroke, "Transparency", 0)
+	trackFade(s.KeyLabel, "TextTransparency", 0)
+	trackFade(s.KeyLabel, "TextStrokeTransparency", 0)
+	trackFade(s.CountLabel, "TextTransparency", 0)
+	trackFade(s.CountLabel, "TextStrokeTransparency", 0)
+	trackFade(s.NameLabel, "TextTransparency", 0)
+	trackFade(s.NameLabel, "TextStrokeTransparency", 0)
+end
+
+-- Start every fadable element fully transparent so the very first open plays a real fade-in
+-- instead of a no-op tween (properties were built at their "open" resting values above).
+for _, f in ipairs(fadeTargets) do
+	f.inst[f.prop] = 1
+end
+
+local backpackOpen = false
+local function setBackpackOpen(open: boolean)
+	if open == backpackOpen then return end
+	backpackOpen = open
+
+	if open then
+		panel.Visible = true
+		panel.Position = UDim2.new(0.5, 0, 0.42, 6)
+	end
+
+	local targetPos = open and UDim2.new(0.5, 0, 0.42, 0) or UDim2.new(0.5, 0, 0.42, 6)
+	TweenService:Create(panel, TWEEN_PANEL, { Position = targetPos }):Play()
+
+	for _, f in ipairs(fadeTargets) do
+		local goal = open and f.base or 1
+		TweenService:Create(f.inst, TWEEN_PANEL, { [f.prop] = goal }):Play()
+	end
+
+	if not open then
+		task.delay(TWEEN_PANEL.Time, function()
+			if not backpackOpen then
+				panel.Visible = false
+			end
+		end)
+	end
+end
+
+-- Fade the belt in once on load rather than popping in instantly.
+beltPanel.BackgroundTransparency = 1
+beltPanelStroke.Transparency = 1
+for _, s in ipairs(beltSlots) do
+	s.Frame.BackgroundTransparency = 1
+	s.Stroke.Transparency = 1
+	s.KeyLabel.TextTransparency = 1
+	s.KeyLabel.TextStrokeTransparency = 1
+end
+TweenService:Create(beltPanel, TWEEN_PANEL, { BackgroundTransparency = 0.08 }):Play()
+TweenService:Create(beltPanelStroke, TWEEN_PANEL, { Transparency = 0 }):Play()
+for _, s in ipairs(beltSlots) do
+	TweenService:Create(s.Frame, TWEEN_PANEL, { BackgroundTransparency = 0 }):Play()
+	TweenService:Create(s.Stroke, TWEEN_PANEL, { Transparency = 0 }):Play()
+	TweenService:Create(s.KeyLabel, TWEEN_PANEL, { TextTransparency = 0, TextStrokeTransparency = 0 }):Play()
 end
 
 -- ---------------------------------------------------------------------------------------
@@ -381,27 +502,15 @@ local function renderArea(slotList, itemsArr)
 		local tool = itemsArr[i]
 		slot.Tool = tool
 		if tool then
-			if slot.IconTool ~= tool then
-				slot.IconTool = tool
-				renderIcon(slot.Viewport, slot.Camera, tool)
-			end
 			slot.NameLabel.Text = tool.Name
 			slot.CountLabel.Text = formatCount(tool) or ""
-			local equipped = isEquipped(tool)
-			slot.Selected = equipped
-			slot.Stroke.Color = (equipped or slot.Hovered) and ACCENT or IDLE_STROKE
-			slot.Stroke.Thickness = equipped and 2.5 or 1.5
+			slot.Selected = isEquipped(tool)
 		else
-			if slot.IconTool then
-				slot.IconTool = nil
-				clearViewport(slot.Viewport)
-			end
 			slot.NameLabel.Text = ""
 			slot.CountLabel.Text = ""
 			slot.Selected = false
-			slot.Stroke.Color = slot.Hovered and ACCENT or IDLE_STROKE
-			slot.Stroke.Thickness = 1.5
 		end
+		slot.ApplyVisualState()
 	end
 end
 
@@ -472,29 +581,38 @@ local function startDrag(slot, mousePos)
 	ghost = Instance.new("Frame")
 	ghost.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
 	ghost.AnchorPoint = Vector2.new(0.5, 0.5)
-	ghost.BackgroundColor3 = SLOT_BG
-	ghost.BackgroundTransparency = 0.2
+	ghost.BackgroundColor3 = COL_SLOT_BG_HOVER
+	ghost.BackgroundTransparency = 0.05
 	ghost.ZIndex = 50
 	ghost.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
 	ghost.Parent = gui
 	local gc = Instance.new("UICorner")
-	gc.CornerRadius = UDim.new(0, 10)
+	gc.CornerRadius = SLOT_CORNER
 	gc.Parent = ghost
 	local gs = Instance.new("UIStroke")
-	gs.Color = ACCENT
-	gs.Thickness = 2
+	gs.Color = COL_ACCENT
+	gs.Thickness = 1.5
 	gs.Parent = ghost
-	local vp = Instance.new("ViewportFrame")
-	vp.Size = UDim2.new(1, -8, 1, -8)
-	vp.Position = UDim2.new(0, 4, 0, 4)
-	vp.BackgroundTransparency = 1
-	vp.ZIndex = 51
-	vp.Parent = ghost
-	local cam = Instance.new("Camera")
-	cam.FieldOfView = 28
-	cam.Parent = vp
-	vp.CurrentCamera = cam
-	renderIcon(vp, cam, slot.Tool)
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -8, 1, -8)
+	nameLabel.Position = UDim2.new(0, 4, 0, 4)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = slot.Tool and slot.Tool.Name or ""
+	nameLabel.TextColor3 = COL_TEXT
+	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	nameLabel.TextStrokeTransparency = 0
+	nameLabel.TextSize = 12
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextWrapped = true
+	nameLabel.TextScaled = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
+	nameLabel.ZIndex = 51
+	nameLabel.Parent = ghost
+
+	local nameLabelConstraint = Instance.new("UITextSizeConstraint")
+	nameLabelConstraint.MaxTextSize = 12
+	nameLabelConstraint.Parent = nameLabel
 end
 
 local function handleDrop(sourceSlot, target)
@@ -605,7 +723,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 
 	if input.KeyCode == Enum.KeyCode.B then
-		panel.Visible = not panel.Visible
+		setBackpackOpen(not backpackOpen)
 		return
 	end
 

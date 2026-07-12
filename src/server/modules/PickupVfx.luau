@@ -4,14 +4,10 @@
 -- the instant E is pressed, the item flies to (and shrinks into) the collecting player over a
 -- short dynamic Lerp before actually being removed, following their real-time position.
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Shared = ReplicatedStorage:WaitForChild("Shared")
-local AudioManager = require(Shared:WaitForChild("AudioManager"))
 
 local PickupVfx = {}
 
-local ABSORB_TIME = 0.45
+local ABSORB_TIME = 0.2
 
 -- Disables `prompt` immediately, locks/interpolates `part` toward `player`'s HumanoidRootPart
 -- while shrinking it, then calls `onComplete`. This follows the player dynamically if they move.
@@ -23,12 +19,6 @@ function PickupVfx.absorb(part: BasePart, prompt: ProximityPrompt, player: Playe
 	if not root then
 		onComplete()
 		return
-	end
-
-	-- Play global pickup sound on the player's Head using the AudioManager
-	local head = char:FindFirstChild("Head")
-	if head then
-		AudioManager.play("ItemPickup", head)
 	end
 
 	-- Force server network ownership so replication is authoritative and smooth

@@ -4,7 +4,7 @@
 --  * MoveItem: the inventory UI asks to move a tool between belt and backpack (InventoryService).
 --  * Auto-assign: any tool entering a player's Backpack gets partitioned (belt if room, else
 --    backpack) in one central place, covering every grant source (pickups, ScrapWallet, Ammo...).
--- Scrap and Spore Biomass keep their own richer G-bound events (DropScrap, DropBiomass).
+-- Scrap and Biomass Fuel keep their own richer G-bound events (DropScrap, DropBiomass).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")

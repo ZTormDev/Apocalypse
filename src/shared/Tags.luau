@@ -8,6 +8,7 @@ local Tags = {
 	ElectricFence = "ElectricFence",
 	ItemSpawnPoint = "ItemSpawnPoint",
 	ScrapSpawnPoint = "ScrapSpawnPoint",
+	ZombieSpawnZone = "ZombieSpawnZone",
 }
 
 return Tags
