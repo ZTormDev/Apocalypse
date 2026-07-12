@@ -21,6 +21,9 @@ local PISTOL = GameConfig.Pistol
 
 local macheteAttackEvent = Net.event("CombatEvents", "MacheteAttack")
 local pistolFireEvent = Net.event("CombatEvents", "PistolFire")
+-- Cosmetic-only: blood burst + floating damage number wherever a hit actually lands (client-side
+-- HitFeedbackUI draws it). isHeadshot only ever true for the pistol.
+local hitFeedbackEvent = Net.event("CombatEvents", "HitFeedback")
 
 -- ---------------------------------------------------------------------------------------
 -- Scrap Machete (melee)
@@ -75,6 +78,8 @@ macheteAttackEvent.OnServerEvent:Connect(function(player, target)
 		local humanoid = target:FindFirstChildOfClass("Humanoid")
 		if humanoid and humanoid.Health > 0 then
 			humanoid:TakeDamage(MACHETE.Damage)
+			local hitPos = (target:FindFirstChild("Head") or targetRoot).Position
+			hitFeedbackEvent:FireAllClients(hitPos, MACHETE.Damage, false)
 		end
 	elseif isScrap then
 		local currentHealth = target:GetAttribute("Health") or 0
@@ -173,11 +178,10 @@ for _, player in ipairs(Players:GetPlayers()) do
 	initAmmo(player)
 end
 
-pistolFireEvent.OnServerEvent:Connect(function(player, direction)
-	if typeof(direction) ~= "Vector3" or direction.Magnitude == 0 then
+pistolFireEvent.OnServerEvent:Connect(function(player, aimPoint)
+	if typeof(aimPoint) ~= "Vector3" then
 		return
 	end
-	direction = direction.Unit
 
 	local char = player.Character
 	local tool = char and char:FindFirstChild("Improvised Pistol")
@@ -207,7 +211,15 @@ pistolFireEvent.OnServerEvent:Connect(function(player, direction)
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { char }
 
+	-- Fire from the shooter's chest toward the exact world point the client aimed at, so the
+	-- bullet always travels toward the cursor.
 	local origin = root.Position + Vector3.new(0, 1, 0)
+	local direction = (aimPoint - origin)
+	if direction.Magnitude == 0 then
+		return
+	end
+	direction = direction.Unit
+
 	local targetPosition = origin + direction * PISTOL.Range
 	local result = workspace:Raycast(origin, direction * PISTOL.Range, params)
 
@@ -219,7 +231,10 @@ pistolFireEvent.OnServerEvent:Connect(function(player, direction)
 			-- The Wildling rig's Humanoid is named "Zombie", not "Humanoid" -- look up by class.
 			local humanoid = model:FindFirstChildOfClass("Humanoid")
 			if humanoid and humanoid.Health > 0 then
-				humanoid:TakeDamage(PISTOL.Damage)
+				local isHeadshot = hitPart.Name == "Head"
+				local damage = isHeadshot and (PISTOL.Damage * PISTOL.HeadshotMultiplier) or PISTOL.Damage
+				humanoid:TakeDamage(damage)
+				hitFeedbackEvent:FireAllClients(targetPosition, damage, isHeadshot)
 			end
 		end
 	end

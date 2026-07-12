@@ -91,8 +91,8 @@ local function runDailySpawnCycle()
 		end
 	end
 
-	-- Percentage of points to spawn: between 50% and 100%
-	local itemPct = math.random(50, 100) / 100
+	-- Percentage of points to spawn, per GameConfig.Spawning.Min/MaxDailyPercent
+	local itemPct = math.random(SPAWN.MinDailyPercent, SPAWN.MaxDailyPercent) / 100
 	local numItemSpawns = math.round(#validItemPoints * itemPct)
 
 	shuffleArray(validItemPoints)
@@ -125,8 +125,8 @@ local function runDailySpawnCycle()
 		end
 	end
 
-	-- Percentage of points to spawn: between 50% and 100%
-	local scrapPct = math.random(50, 100) / 100
+	-- Percentage of points to spawn, per GameConfig.Spawning.Min/MaxDailyPercent
+	local scrapPct = math.random(SPAWN.MinDailyPercent, SPAWN.MaxDailyPercent) / 100
 	local numScrapSpawns = math.round(#validScrapPoints * scrapPct)
 
 	shuffleArray(validScrapPoints)

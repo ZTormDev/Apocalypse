@@ -13,8 +13,25 @@ local Tags = require(Shared:WaitForChild("Tags"))
 
 local HORDE = GameConfig.Enemies.Horde
 
+-- Forces every zone (hand-placed, previously auto-created, or new below) invisible/non-solid at
+-- runtime -- these are level-design placeholders only, meant to be visible in Studio while
+-- positioning them, never to players in Play mode.
+local function hideZone(zone: BasePart)
+	zone.Transparency = 1
+	zone.CanCollide = false
+	zone.CanTouch = false
+	zone.CanQuery = false
+end
+
 if #CollectionService:GetTagged(Tags.ZombieSpawnZone) > 0 then
-	return -- already hand-placed (or already created by a previous run of this script)
+	-- Already hand-placed (or already created by a previous run of this script) -- don't
+	-- duplicate them, but still hide them in case they were left visible for editing.
+	for _, zone in ipairs(CollectionService:GetTagged(Tags.ZombieSpawnZone)) do
+		if zone:IsA("BasePart") then
+			hideZone(zone)
+		end
+	end
+	return
 end
 
 local purifier = Workspace:WaitForChild("Purifier", 15)

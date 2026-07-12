@@ -4,14 +4,33 @@
 local Tool = script.Parent
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Net = require(Shared:WaitForChild("Net"))
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
 local pistolFireEvent = Net.event("CombatEvents", "PistolFire")
+
+-- The exact world point under the cursor, via a camera ray that ignores the shooter's own
+-- character (so the mouse never "hits" your own body/gun and throws the aim off). Falls back to
+-- a far point along the ray when nothing is hit. This is what makes bullets go where you point.
+local function getAimPoint(char: Model): Vector3
+	local camera = Workspace.CurrentCamera
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not camera then
+		return root and (root.Position + root.CFrame.LookVector * 100) or Vector3.zero
+	end
+	local mouseLoc = UserInputService:GetMouseLocation()
+	local screenRay = camera:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { char }
+	local result = Workspace:Raycast(screenRay.Origin, screenRay.Direction * 1000, params)
+	return result and result.Position or (screenRay.Origin + screenRay.Direction * 1000)
+end
 
 local COOLDOWN = GameConfig.Pistol.ClientCooldown
 local TUNING = GameConfig.WeaponTuning.PistolGrip
@@ -97,16 +116,9 @@ Tool.Activated:Connect(function()
 		return
 	end
 
-	local aimPoint = mouse.Hit and mouse.Hit.Position or (root.Position + root.CFrame.LookVector * 100)
-	local direction = aimPoint - root.Position
-	if direction.Magnitude > 0 then
-		direction = direction.Unit
-	else
-		direction = root.CFrame.LookVector
-	end
-
-	-- Send fire command to server
-	pistolFireEvent:FireServer(direction)
+	-- Send the exact world point under the cursor; the server fires from the muzzle toward it.
+	local aimPoint = getAimPoint(char)
+	pistolFireEvent:FireServer(aimPoint)
 
 	task.spawn(playMuzzleFlash)
 end)

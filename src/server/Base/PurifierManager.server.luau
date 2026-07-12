@@ -227,23 +227,95 @@ task.spawn(function()
 	end
 end)
 
--- Fuel level indicator: a billboard progress bar centered above the Purifier's true visual AABB
--- (the "Power Core" model, not the invisible anchor part), same minimalist HUD style as the
--- inventory/prompt UI. Rises/falls as the base is fed fuel (Biomass Catalyst) or it decays.
--- Shows the current level and the fuel amount (current/max) so leveling progress is legible.
+-- Status billboard: one BillboardGui above the Purifier's true visual AABB (the "Power Core"
+-- model, not the invisible anchor part), same minimalist HUD style as the inventory/prompt UI.
+-- Top to bottom: integrity (health, only shown while damaged -- fades out 2s after healing back
+-- to full), level, fuel. Rises/falls as the base is fed fuel (Biomass Catalyst) or it decays.
 do
-	local fuelBillboard = Instance.new("BillboardGui")
-	fuelBillboard.Name = "FuelGui"
-	fuelBillboard.Size = UDim2.new(0, 260, 0, 50)
-	fuelBillboard.StudsOffsetWorldSpace = ModelBounds.getTopCenter(purifier, 1.4) - purifier.Position
-	fuelBillboard.MaxDistance = 45
-	fuelBillboard.AlwaysOnTop = true
-	fuelBillboard.Adornee = purifier
-	fuelBillboard.Parent = purifier
+	local TweenService = game:GetService("TweenService")
+
+	local statusBillboard = Instance.new("BillboardGui")
+	statusBillboard.Name = "StatusGui"
+	statusBillboard.Size = UDim2.new(0, 260, 0, 82)
+	statusBillboard.StudsOffsetWorldSpace = ModelBounds.getTopCenter(purifier, 1.4) - purifier.Position
+	statusBillboard.MaxDistance = 60
+	statusBillboard.AlwaysOnTop = true
+	statusBillboard.Adornee = purifier
+	statusBillboard.Parent = purifier
+
+	-- Integrity (health) row: sits above everything else, space is always reserved so the level/
+	-- fuel rows below never jump when this fades in or out.
+	local integrity = Instance.new("CanvasGroup")
+	integrity.Name = "Integrity"
+	integrity.Size = UDim2.new(1, 0, 0, 30)
+	integrity.Position = UDim2.new(0, 0, 0, 0)
+	integrity.BackgroundTransparency = 1
+	integrity.GroupTransparency = 0
+	integrity.Parent = statusBillboard
+
+	local hpLabel = Instance.new("TextLabel")
+	hpLabel.Name = "Label"
+	hpLabel.Size = UDim2.new(1, 0, 0, 14)
+	hpLabel.BackgroundTransparency = 1
+	hpLabel.Text = "INTEGRITY"
+	hpLabel.TextColor3 = Color3.fromRGB(222, 224, 229)
+	hpLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	hpLabel.TextStrokeTransparency = 0
+	hpLabel.TextSize = 13
+	hpLabel.Font = Enum.Font.GothamBold
+	hpLabel.Parent = integrity
+
+	local hpBg = Instance.new("Frame")
+	hpBg.Name = "Bg"
+	hpBg.AnchorPoint = Vector2.new(0.5, 0)
+	hpBg.Position = UDim2.new(0.5, 0, 0, 15)
+	hpBg.Size = UDim2.new(0.7, 0, 0, 14)
+	hpBg.BackgroundColor3 = Color3.fromRGB(26, 27, 32)
+	hpBg.BackgroundTransparency = 0.1
+	hpBg.BorderSizePixel = 0
+	hpBg.Parent = integrity
+
+	local hpBgCorner = Instance.new("UICorner")
+	hpBgCorner.CornerRadius = UDim.new(0, 5)
+	hpBgCorner.Parent = hpBg
+
+	local hpBgStroke = Instance.new("UIStroke")
+	hpBgStroke.Color = Color3.fromRGB(42, 44, 50)
+	hpBgStroke.Thickness = 1
+	hpBgStroke.Parent = hpBg
+
+	local hpFill = Instance.new("Frame")
+	hpFill.Name = "Fill"
+	hpFill.Size = UDim2.new(1, 0, 1, 0)
+	hpFill.BackgroundColor3 = Color3.fromRGB(196, 84, 84) -- matches the player HUD's health color
+	hpFill.BorderSizePixel = 0
+	hpFill.Parent = hpBg
+
+	local hpFillCorner = Instance.new("UICorner")
+	hpFillCorner.CornerRadius = UDim.new(0, 5)
+	hpFillCorner.Parent = hpFill
+
+	local hpAmountLabel = Instance.new("TextLabel")
+	hpAmountLabel.Name = "AmountLabel"
+	hpAmountLabel.Size = UDim2.new(1, -6, 1, 0)
+	hpAmountLabel.BackgroundTransparency = 1
+	hpAmountLabel.Text = ""
+	hpAmountLabel.TextColor3 = Color3.fromRGB(222, 224, 229)
+	hpAmountLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	hpAmountLabel.TextStrokeTransparency = 0
+	hpAmountLabel.TextSize = 12
+	hpAmountLabel.Font = Enum.Font.GothamBold
+	hpAmountLabel.TextXAlignment = Enum.TextXAlignment.Right
+	hpAmountLabel.ZIndex = 2
+	hpAmountLabel.Parent = hpBg
+
+	-- Level + fuel rows, shifted down to make room for the integrity row above them.
+	local ROW_OFFSET = 32
 
 	local levelLabel = Instance.new("TextLabel")
 	levelLabel.Name = "LevelLabel"
 	levelLabel.Size = UDim2.new(1, 0, 0, 21)
+	levelLabel.Position = UDim2.new(0, 0, 0, ROW_OFFSET)
 	levelLabel.BackgroundTransparency = 1
 	levelLabel.Text = "LEVEL 1"
 	levelLabel.TextColor3 = Color3.fromRGB(222, 224, 229)
@@ -251,17 +323,17 @@ do
 	levelLabel.TextStrokeTransparency = 0
 	levelLabel.TextSize = 20
 	levelLabel.Font = Enum.Font.GothamBold
-	levelLabel.Parent = fuelBillboard
+	levelLabel.Parent = statusBillboard
 
 	local fuelBg = Instance.new("Frame")
 	fuelBg.Name = "Bg"
 	fuelBg.AnchorPoint = Vector2.new(0.5, 0)
-	fuelBg.Position = UDim2.new(0.5, 0, 0, 27)
+	fuelBg.Position = UDim2.new(0.5, 0, 0, ROW_OFFSET + 27)
 	fuelBg.Size = UDim2.new(0.7, 0, 0, 16)
 	fuelBg.BackgroundColor3 = Color3.fromRGB(26, 27, 32)
 	fuelBg.BackgroundTransparency = 0.1
 	fuelBg.BorderSizePixel = 0
-	fuelBg.Parent = fuelBillboard
+	fuelBg.Parent = statusBillboard
 
 	local fuelBgCorner = Instance.new("UICorner")
 	fuelBgCorner.CornerRadius = UDim.new(0, 5)
@@ -309,6 +381,50 @@ do
 	stateFolder:GetAttributeChangedSignal("PurifierMaxFuel"):Connect(updateFuelBar)
 	stateFolder:GetAttributeChangedSignal("PurifierLevel"):Connect(updateFuelBar)
 	updateFuelBar()
+
+	local FADE = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local fadeTween: Tween? = nil
+	local hideTask: thread? = nil
+
+	local function show()
+		if hideTask then
+			task.cancel(hideTask)
+			hideTask = nil
+		end
+		if fadeTween then
+			fadeTween:Cancel()
+			fadeTween = nil
+		end
+		integrity.GroupTransparency = 0
+	end
+
+	local function scheduleHide()
+		if hideTask or integrity.GroupTransparency >= 1 then
+			return
+		end
+		hideTask = task.delay(2, function()
+			hideTask = nil
+			fadeTween = TweenService:Create(integrity, FADE, { GroupTransparency = 1 })
+			fadeTween:Play()
+		end)
+	end
+
+	local function updateHealthBar()
+		local hp = stateFolder:GetAttribute("PurifierHealth") or 0
+		local maxHp = stateFolder:GetAttribute("PurifierMaxHealth") or 1
+		hpFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
+		hpAmountLabel.Text = math.floor(hp) .. " / " .. math.floor(maxHp)
+		if hp < maxHp then
+			show()
+		else
+			scheduleHide()
+		end
+	end
+	stateFolder:GetAttributeChangedSignal("PurifierHealth"):Connect(updateHealthBar)
+	stateFolder:GetAttributeChangedSignal("PurifierMaxHealth"):Connect(updateHealthBar)
+	-- Starts hidden (not damaged yet) without waiting for the first fade-out delay.
+	integrity.GroupTransparency = 1
+	updateHealthBar()
 end
 
 -- Constant ambient energy particles so the Purifier reads as "alive" at all times, not

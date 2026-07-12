@@ -143,8 +143,9 @@ local thirstFill, thirstPct = buildBar(panel, "THIRST", COL_THIRST, 3)
 
 -- Mask filter: a separate small panel above the main stats, only shown while outside the dome
 -- (IsOutsideDome attribute, set by PurifierManager) -- irrelevant/noise while safe inside.
-local filterPanel = Instance.new("Frame")
+local filterPanel = Instance.new("CanvasGroup") -- CanvasGroup so the whole panel can fade at once
 filterPanel.Name = "FilterPanel"
+filterPanel.GroupTransparency = 0
 filterPanel.AnchorPoint = Vector2.new(0, 1)
 filterPanel.Position = UDim2.new(0, 16, 1, -18 - (PADDING * 2 + BAR_HEIGHT * 3 + BAR_GAP * 2) - 10)
 filterPanel.Size = UDim2.new(0, PANEL_WIDTH, 0, PADDING * 2 + BAR_HEIGHT)
@@ -203,13 +204,51 @@ updateThirst()
 
 local OX = GameConfig.Oxygen
 
+-- The filter panel only shows while the mask is actually being consumed (below full). When it
+-- tops back up to 100% it lingers for 2s, then fades out (rather than vanishing instantly).
+local FILTER_FADE = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local filterFadeTween: Tween? = nil
+local filterHideTask: thread? = nil
+
+local function showFilter()
+	if filterHideTask then
+		task.cancel(filterHideTask)
+		filterHideTask = nil
+	end
+	if filterFadeTween then
+		filterFadeTween:Cancel()
+		filterFadeTween = nil
+	end
+	filterPanel.GroupTransparency = 0
+	filterPanel.Visible = true
+end
+
+local function scheduleFilterHide()
+	if filterHideTask or not filterPanel.Visible then
+		return -- already fading/scheduled, or already hidden
+	end
+	filterHideTask = task.delay(2, function()
+		filterHideTask = nil
+		filterFadeTween = TweenService:Create(filterPanel, FILTER_FADE, { GroupTransparency = 1 })
+		filterFadeTween.Completed:Connect(function(state)
+			if state == Enum.PlaybackState.Completed then
+				filterPanel.Visible = false
+			end
+		end)
+		filterFadeTween:Play()
+	end)
+end
+
 local function updateFilter()
-	filterPanel.Visible = player:GetAttribute("IsOutsideDome") == true
 	local oxygen = player:GetAttribute("FilterOxygen") or OX.Max
 	setBar(filterFill, filterPct, oxygen / OX.Max)
+	if oxygen < OX.Max then
+		showFilter()
+	else
+		scheduleFilterHide()
+	end
 end
 player:GetAttributeChangedSignal("FilterOxygen"):Connect(updateFilter)
-player:GetAttributeChangedSignal("IsOutsideDome"):Connect(updateFilter)
 updateFilter()
 
 local function hookHumanoid(char: Model)

@@ -13,6 +13,9 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Tags = require(Shared:WaitForChild("Tags"))
 
+local ServerScriptService = game:GetService("ServerScriptService")
+local Ragdoll = require(ServerScriptService:WaitForChild("modules"):WaitForChild("Ragdoll"))
+
 local MycomorphFactory = {}
 
 -- Wildlings physically collide with each other (a normal collision group, so a crowd pushes/
@@ -72,7 +75,7 @@ local function addHealthBar(char: Model, humanoid: Humanoid, displayName: string
 	bgui.Size = UDim2.new(0, 110, 0, 30)
 	bgui.AlwaysOnTop = true
 	bgui.StudsOffset = Vector3.new(0, 2.6, 0)
-	bgui.MaxDistance = 60
+	bgui.MaxDistance = 60 -- default range at full health; widened once the zombie takes damage
 	bgui.Parent = adornee
 
 	local nameLabel = Instance.new("TextLabel")
@@ -116,11 +119,20 @@ local function addHealthBar(char: Model, humanoid: Humanoid, displayName: string
 	fillCorner.CornerRadius = UDim.new(0, 4)
 	fillCorner.Parent = fill
 
-	local despawnDelay = GameConfig.Enemies.DespawnDelay
 	humanoid.HealthChanged:Connect(function(health)
 		fill.Size = UDim2.new(math.clamp(health / humanoid.MaxHealth, 0, 1), 0, 1, 0)
-		if health <= 0 then
-			task.wait(despawnDelay)
+		-- Once hurt, the bar reads from farther away too, so a wounded/aggro'd Wildling stands
+		-- out at a distance instead of only being legible once you're already close to it.
+		bgui.MaxDistance = (health < humanoid.MaxHealth) and 110 or 60
+	end)
+
+	-- On death: ragdoll (same physics-flop treatment as the player, see modules.Ragdoll) instead
+	-- of vanishing, hide the now-irrelevant health bar, and despawn the corpse after DespawnDelay.
+	humanoid.Died:Connect(function()
+		bgui.Enabled = false
+		Ragdoll.apply(char)
+		task.wait(GameConfig.Enemies.DespawnDelay)
+		if char.Parent then
 			char:Destroy()
 		end
 	end)
@@ -165,6 +177,9 @@ function MycomorphFactory.create(variantKey: string, spawnPos: Vector3): Model?
 	humanoid.Health = def.MaxHealth
 	humanoid.WalkSpeed = def.WalkSpeed
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	-- Ragdoll on death instead of Roblox's default BreakJointsOnDeath (which disassembles the
+	-- rig into disconnected floating parts) -- see the humanoid.Died connection in addHealthBar.
+	humanoid.BreakJointsOnDeath = false
 	-- Fully neutralize jumping (not just AutoJumpEnabled) so a Humanoid blocked by another
 	-- Wildling's body can never hop up and appear to climb/stand on top of it -- with JumpPower/
 	-- JumpHeight zeroed, even a Jump state transition physically can't lift it off the ground.
